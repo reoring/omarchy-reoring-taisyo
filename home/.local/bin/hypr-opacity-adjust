@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+STEP=${STEP:-0.05}
+MIN=${MIN:-0.20}
+MAX=${MAX:-1.00}
+DEFAULT=${DEFAULT:-1.00}
+
+usage() {
+  echo "Usage: $(basename "$0") up|down" >&2
+}
+
+direction="${1:-}"
+case "$direction" in
+  up|down) ;;
+  *) usage; exit 2 ;;
+esac
+
+addr=$(hyprctl activewindow -j | jq -r '.address')
+if [[ -z "$addr" || "$addr" == "null" ]]; then
+  exit 0
+fi
+
+current=$(hyprctl getprop "address:$addr" opacity 2>/dev/null | head -n1 || true)
+if [[ -z "$current" ]]; then
+  current=$DEFAULT
+fi
+
+next=$(
+  DIR="$direction" STEP="$STEP" MIN="$MIN" MAX="$MAX" CUR="$current" \
+  python - <<'PY'
+import os
+
+direction = os.environ['DIR']
+step = float(os.environ['STEP'])
+minv = float(os.environ['MIN'])
+maxv = float(os.environ['MAX'])
+cur = float(os.environ['CUR'])
+
+nxt = cur + step if direction == 'up' else cur - step
+nxt = max(minv, min(maxv, nxt))
+print(f"{nxt:.2f}")
+PY
+)
+
+# Ensure opacity takes effect
+if [[ "$next" != "1.00" ]]; then
+  hyprctl dispatch setprop "address:$addr" opaque off >/dev/null
+else
+  hyprctl dispatch setprop "address:$addr" opaque on >/dev/null
+fi
+
+hyprctl dispatch setprop "address:$addr" opacity "$next" >/dev/null
+notify-send "Window opacity" "$next" -t 1200

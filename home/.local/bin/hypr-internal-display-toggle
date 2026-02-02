@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Toggle the internal (laptop) display.
+# - If the internal display is disabled, enable it.
+# - If the internal display is enabled, disable it only when at least one
+#   external display is active (prevents turning off your only monitor).
+
+monitors_json=$(hyprctl monitors all -j)
+
+internal="${INTERNAL_MONITOR:-}"
+if [[ -z "$internal" ]]; then
+  if echo "$monitors_json" | jq -e '.[] | select(.name=="eDP-1")' >/dev/null; then
+    internal="eDP-1"
+  else
+    internal=$(echo "$monitors_json" | jq -r '[.[] | select(.name | test("^(eDP|LVDS|DSI)-")) | .name][0] // empty')
+  fi
+fi
+
+if [[ -z "$internal" ]]; then
+  notify-send "Display" "No internal display found" -t 2000
+  exit 1
+fi
+
+internal_disabled=$(echo "$monitors_json" | jq -r --arg m "$internal" '.[] | select(.name==$m) | .disabled')
+
+# If internal is currently disabled, always allow enabling it (recovery path).
+if [[ "$internal_disabled" == "true" ]]; then
+  hyprctl keyword monitor "${internal},preferred,auto,auto" >/dev/null
+  notify-send "Display" "${internal}: enabled" -t 1500
+  exit 0
+fi
+
+external_active_count=$(echo "$monitors_json" | jq -r --arg m "$internal" '[.[] | select(.name != $m and .disabled == false) | .name] | length')
+
+if [[ "$external_active_count" == "0" ]]; then
+  notify-send "Display" "No external display active; keeping ${internal} on" -t 1800
+  exit 0
+fi
+
+hyprctl keyword monitor "${internal},disable" >/dev/null
+notify-send "Display" "${internal}: disabled" -t 1500

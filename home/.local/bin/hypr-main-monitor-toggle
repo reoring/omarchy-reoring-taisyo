@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+STATE_FILE="${XDG_CACHE_HOME:-$HOME/.cache}/hypr-main-role"
+INTERNAL_RE='^(eDP|LVDS|DSI)-'
+
+WAYBAR_MAIN_SIGNAL="${WAYBAR_MAIN_SIGNAL:-10}"
+
+PARK_MIN=${PARK_MIN:-95}
+PARK_MAX=${PARK_MAX:-99}
+PARK_DEFAULT=${PARK_DEFAULT:-99}
+
+monitors_json=$(hyprctl monitors -j)
+
+internal=$(echo "$monitors_json" | jq -r --arg re "$INTERNAL_RE" '[.[] | select(.name | test($re)) | .name][0] // empty')
+external=$(echo "$monitors_json" | jq -r --arg re "$INTERNAL_RE" '[.[] | select((.name | test($re)) | not) | .name][0] // empty')
+focused=$(echo "$monitors_json" | jq -r '.[] | select(.focused == true) | .name' | head -n 1)
+
+read_role() {
+  if [[ -f "$STATE_FILE" ]]; then
+    cat "$STATE_FILE" 2>/dev/null || true
+    return
+  fi
+
+  if [[ -n "${focused:-}" && "$focused" =~ $INTERNAL_RE ]]; then
+    printf '%s' "internal"
+  else
+    printf '%s' "external"
+  fi
+}
+
+role="$(read_role)"
+if [[ "$role" != "internal" && "$role" != "external" ]]; then
+  role="internal"
+fi
+
+# Normalize if the preferred role is not available.
+if [[ "$role" == "external" && -z "$external" ]]; then
+  role="internal"
+fi
+if [[ "$role" == "internal" && -z "$internal" ]]; then
+  role="external"
+fi
+
+new_role="$role"
+if [[ "$role" == "internal" ]]; then
+  if [[ -n "$external" ]]; then
+    new_role="external"
+  fi
+else
+  if [[ -n "$internal" ]]; then
+    new_role="internal"
+  fi
+fi
+
+if [[ "$new_role" == "external" ]]; then
+  main_monitor="$external"
+  parking_monitor="$internal"
+else
+  main_monitor="$internal"
+  parking_monitor="$external"
+fi
+
+if [[ -z "$main_monitor" ]]; then
+  notify-send "Main monitor" "No monitor found" -t 2000
+  exit 1
+fi
+
+mkdir -p "$(dirname "$STATE_FILE")"
+printf '%s' "$new_role" >"$STATE_FILE"
+
+current_ws=$(hyprctl activeworkspace -j | jq -r '.id')
+
+workspaces=$(hyprctl workspaces -j | jq -r '.[].id' | sort -n | uniq)
+
+for ws in $workspaces; do
+  [[ "$ws" == "0" ]] && continue
+
+  if (( ws >= PARK_MIN && ws <= PARK_MAX )); then
+    if [[ -n "$parking_monitor" ]]; then
+      hyprctl dispatch moveworkspacetomonitor "$ws $parking_monitor" >/dev/null
+    fi
+  else
+    hyprctl dispatch moveworkspacetomonitor "$ws $main_monitor" >/dev/null
+  fi
+done
+
+# Ensure the non-main monitor is always showing a parking workspace when present.
+if [[ -n "$parking_monitor" ]]; then
+  hyprctl dispatch focusmonitor "$parking_monitor" >/dev/null
+  hyprctl dispatch workspace "$PARK_DEFAULT" >/dev/null
+fi
+
+hyprctl dispatch focusmonitor "$main_monitor" >/dev/null
+restore_ws="$current_ws"
+if [[ -z "${restore_ws:-}" || "$restore_ws" == "null" ]]; then
+  restore_ws="1"
+fi
+if (( restore_ws >= PARK_MIN && restore_ws <= PARK_MAX )); then
+  restore_ws="1"
+fi
+hyprctl dispatch workspace "$restore_ws" >/dev/null
+
+notify-send "Main monitor" "Main: ${main_monitor} (role: ${new_role})" -t 1500
+
+# Refresh Waybar module if configured.
+pkill -RTMIN+"$WAYBAR_MAIN_SIGNAL" waybar >/dev/null 2>&1 || true

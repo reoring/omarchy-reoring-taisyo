@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SERVICE="lid-nosuspend.service"
+WAYBAR_LID_SIGNAL="${WAYBAR_LID_SIGNAL:-9}"
+
+# Ensure the user service is discoverable after updates.
+systemctl --user daemon-reload >/dev/null 2>&1 || true
+
+if systemctl --user is-active --quiet "$SERVICE"; then
+  systemctl --user stop "$SERVICE"
+  notify-send "Lid close" "Suspend enabled (default)"
+else
+  systemctl --user start "$SERVICE"
+  notify-send "Lid close" "Suspend disabled (stay awake)"
+fi
+
+# Refresh Waybar module if configured.
+pkill -RTMIN+"$WAYBAR_LID_SIGNAL" waybar >/dev/null 2>&1 || true

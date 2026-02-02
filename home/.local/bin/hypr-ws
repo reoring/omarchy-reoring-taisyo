@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  echo "usage: hypr-ws <main|park> <goto|move|move-silent> <ws> [fallback_ws]" >&2
+  exit 2
+}
+
+target="${1:-}"
+action="${2:-}"
+ws="${3:-}"
+fallback_ws="${4:-}"
+
+[[ -z "$target" || -z "$action" || -z "$ws" ]] && usage
+
+STATE_FILE="${XDG_CACHE_HOME:-$HOME/.cache}/hypr-main-role"
+INTERNAL_RE='^(eDP|LVDS|DSI)-'
+
+PARK_MIN=${PARK_MIN:-95}
+PARK_MAX=${PARK_MAX:-99}
+
+monitors_json=$(hyprctl monitors -j)
+
+internal=$(echo "$monitors_json" | jq -r --arg re "$INTERNAL_RE" '[.[] | select(.name | test($re)) | .name][0] // empty')
+external=$(echo "$monitors_json" | jq -r --arg re "$INTERNAL_RE" '[.[] | select((.name | test($re)) | not) | .name][0] // empty')
+focused=$(echo "$monitors_json" | jq -r '.[] | select(.focused == true) | .name' | head -n 1)
+
+read_role() {
+  if [[ -f "$STATE_FILE" ]]; then
+    cat "$STATE_FILE" 2>/dev/null || true
+    return
+  fi
+
+  local derived
+  if [[ -n "${focused:-}" && "$focused" =~ $INTERNAL_RE ]]; then
+    derived="internal"
+  else
+    derived="external"
+  fi
+
+  # Persist the derived role so "main" is stable across key presses.
+  mkdir -p "$(dirname "$STATE_FILE")" 2>/dev/null || true
+  printf '%s' "$derived" >"$STATE_FILE" 2>/dev/null || true
+
+  printf '%s' "$derived"
+}
+
+role="$(read_role)"
+if [[ "$role" != "internal" && "$role" != "external" ]]; then
+  role="internal"
+fi
+
+if [[ "$role" == "external" && -z "$external" ]]; then
+  role="internal"
+fi
+if [[ "$role" == "internal" && -z "$internal" ]]; then
+  role="external"
+fi
+
+if [[ "$role" == "external" ]]; then
+  main_monitor="$external"
+  parking_monitor="$internal"
+else
+  main_monitor="$internal"
+  parking_monitor="$external"
+fi
+
+if [[ -z "$main_monitor" ]]; then
+  exit 0
+fi
+
+dest_monitor="$main_monitor"
+dest_ws="$ws"
+
+if [[ "$target" == "park" ]]; then
+  if [[ -n "$parking_monitor" ]]; then
+    dest_monitor="$parking_monitor"
+  else
+    # No second monitor: fall back to main (usually 11-15) behavior.
+    dest_monitor="$main_monitor"
+    if [[ -n "$fallback_ws" ]]; then
+      dest_ws="$fallback_ws"
+    fi
+  fi
+elif [[ "$target" != "main" ]]; then
+  usage
+fi
+
+if [[ "$dest_ws" =~ ^[0-9]+$ ]]; then
+  :
+else
+  usage
+fi
+
+workspace_exists() {
+  local id="$1"
+  hyprctl workspaces -j | jq -e --arg id "$id" 'any(.[]; .id == ($id | tonumber))' >/dev/null 2>&1
+}
+
+ensure_workspace_on_monitor_silent() {
+  local id="$1"
+  local mon="$2"
+
+  if workspace_exists "$id"; then
+    hyprctl dispatch moveworkspacetomonitor "$id $mon" >/dev/null
+    return 0
+  fi
+
+  local orig_mon
+  local orig_ws
+  orig_mon="$focused"
+  orig_ws=$(hyprctl activeworkspace -j | jq -r '.id')
+
+  hyprctl dispatch focusmonitor "$mon" >/dev/null
+  hyprctl dispatch workspace "$id" >/dev/null
+
+  if [[ -n "$orig_mon" ]]; then
+    hyprctl dispatch focusmonitor "$orig_mon" >/dev/null
+  fi
+  if [[ -n "$orig_ws" && "$orig_ws" != "null" ]]; then
+    hyprctl dispatch workspace "$orig_ws" >/dev/null
+  fi
+}
+
+move_workspace_to_monitor_if_exists() {
+  local id="$1"
+  local mon="$2"
+  if workspace_exists "$id"; then
+    hyprctl dispatch moveworkspacetomonitor "$id $mon" >/dev/null
+  fi
+}
+
+active_window_addr=$(hyprctl activewindow -j 2>/dev/null | jq -r '.address // empty')
+
+case "$action" in
+  goto)
+    move_workspace_to_monitor_if_exists "$dest_ws" "$dest_monitor"
+    hyprctl dispatch focusmonitor "$dest_monitor" >/dev/null
+    hyprctl dispatch workspace "$dest_ws" >/dev/null
+    ;;
+
+  move)
+    [[ -z "$active_window_addr" || "$active_window_addr" == "null" ]] && exit 0
+    move_workspace_to_monitor_if_exists "$dest_ws" "$dest_monitor"
+    hyprctl dispatch movetoworkspace "$dest_ws,address:$active_window_addr" >/dev/null
+    hyprctl dispatch focusmonitor "$dest_monitor" >/dev/null
+    hyprctl dispatch workspace "$dest_ws" >/dev/null
+    ;;
+
+  move-silent)
+    [[ -z "$active_window_addr" || "$active_window_addr" == "null" ]] && exit 0
+    ensure_workspace_on_monitor_silent "$dest_ws" "$dest_monitor"
+    hyprctl dispatch movetoworkspacesilent "$dest_ws,address:$active_window_addr" >/dev/null
+    ;;
+
+  *)
+    usage
+    ;;
+esac

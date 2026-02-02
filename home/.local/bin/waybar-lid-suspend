@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SERVICE="lid-nosuspend.service"
+
+if systemctl --user is-active --quiet "$SERVICE"; then
+  echo '{"text":"","tooltip":"Lid close: stay awake (click to enable suspend)","class":"active"}'
+else
+  echo '{"text":"","tooltip":"Lid close: suspend (click to stay awake)","class":"inactive"}'
+fi

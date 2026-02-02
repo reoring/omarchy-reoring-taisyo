@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Adjust Hyprland's gaps for the active workspace.
+# Uses workspace rules (like omarchy-hyprland-workspace-toggle-gaps), so changes are per-workspace.
+
+STEP_OUT=${STEP_OUT:-2}
+STEP_IN=${STEP_IN:-1}
+MIN=${MIN:-0}
+MAX_OUT=${MAX_OUT:-80}
+MAX_IN=${MAX_IN:-80}
+
+usage() {
+  echo "Usage: $(basename "$0") up|down" >&2
+}
+
+direction="${1:-}"
+case "$direction" in
+  up|down) ;;
+  *) usage; exit 2 ;;
+esac
+
+workspace_id=$(hyprctl activeworkspace -j | jq -r '.id')
+if [[ -z "$workspace_id" || "$workspace_id" == "null" ]]; then
+  exit 0
+fi
+
+rules_json=$(hyprctl workspacerules -j)
+
+line=$(
+  echo "$rules_json" | jq -r --arg ws "$workspace_id" '.[] | select(.workspaceString==$ws) | "\(.gapsOut[0] // 0)\t\(.gapsIn[0] // 0)\t\(.borderSize // 0)"' | head -n1 || true
+)
+
+current_out=""
+current_in=""
+current_border=""
+if [[ -n "$line" ]]; then
+  IFS=$'\t' read -r current_out current_in current_border <<<"$line"
+fi
+
+default_out=$(hyprctl -j getoption general:gaps_out | jq -r '.custom // "0"' | awk '{print $1}')
+default_in=$(hyprctl -j getoption general:gaps_in | jq -r '.custom // "0"' | awk '{print $1}')
+default_border=$(hyprctl -j getoption general:border_size | jq -r '.int // 0')
+
+current_out=${current_out:-$default_out}
+current_in=${current_in:-$default_in}
+current_border=${current_border:-$default_border}
+
+if [[ "$direction" == "up" ]]; then
+  next_out=$((current_out + STEP_OUT))
+  next_in=$((current_in + STEP_IN))
+else
+  next_out=$((current_out - STEP_OUT))
+  next_in=$((current_in - STEP_IN))
+fi
+
+if (( next_out < MIN )); then
+  next_out=$MIN
+elif (( next_out > MAX_OUT )); then
+  next_out=$MAX_OUT
+fi
+
+if (( next_in < MIN )); then
+  next_in=$MIN
+elif (( next_in > MAX_IN )); then
+  next_in=$MAX_IN
+fi
+
+if (( next_out == 0 )); then
+  next_in=0
+fi
+
+next_border=$current_border
+if (( next_out == 0 && next_in == 0 )); then
+  next_border=0
+elif (( next_border == 0 )); then
+  next_border=$default_border
+fi
+
+hyprctl keyword "workspace $workspace_id, gapsout:${next_out}, gapsin:${next_in}, bordersize:${next_border}" >/dev/null
+notify-send "Workspace gaps" "ws=${workspace_id} out=${next_out} in=${next_in} border=${next_border}" -t 1200

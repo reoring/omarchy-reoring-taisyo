@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+STEP_K=${STEP_K:-250}
+MIN_K=${MIN_K:-2500}
+MAX_K=${MAX_K:-6500}
+DEFAULT_K=${DEFAULT_K:-6000}
+
+usage() {
+  echo "Usage: $(basename "$0") up|down" >&2
+}
+
+direction="${1:-}"
+case "$direction" in
+  up|down) ;;
+  *) usage; exit 2 ;;
+esac
+
+# Ensure hyprsunset is running
+if ! pgrep -x hyprsunset >/dev/null; then
+  setsid uwsm-app -- hyprsunset >/dev/null 2>&1 &
+  sleep 0.5
+fi
+
+current_k=$(hyprctl hyprsunset temperature 2>/dev/null | grep -oE '[0-9]+' | head -n1 || true)
+if [[ -z "$current_k" ]]; then
+  current_k=$DEFAULT_K
+fi
+
+if [[ "$direction" == "up" ]]; then
+  next_k=$((current_k + STEP_K))
+else
+  next_k=$((current_k - STEP_K))
+fi
+
+if (( next_k < MIN_K )); then
+  next_k=$MIN_K
+elif (( next_k > MAX_K )); then
+  next_k=$MAX_K
+fi
+
+hyprctl hyprsunset temperature "$next_k" >/dev/null
+notify-send "Nightlight" "Temperature: ${next_k}K" -t 1200

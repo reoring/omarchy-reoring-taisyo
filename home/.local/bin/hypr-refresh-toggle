@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+LOW_HZ=${LOW_HZ:-60}
+HIGH_HZ=${HIGH_HZ:-120}
+
+monitors_json=$(hyprctl monitors -j)
+
+monitor="${1:-}"
+if [[ -z "$monitor" ]]; then
+  if echo "$monitors_json" | jq -e '.[] | select(.name=="eDP-1")' >/dev/null; then
+    monitor="eDP-1"
+  else
+    monitor=$(echo "$monitors_json" | jq -r '.[] | select(.focused==true) | .name')
+  fi
+fi
+
+if [[ -z "$monitor" || "$monitor" == "null" ]]; then
+  exit 0
+fi
+
+read -r current_refresh width height x y scale < <(
+  echo "$monitors_json" | jq -r --arg m "$monitor" '.[] | select(.name==$m) | "\(.refreshRate) \(.width) \(.height) \(.x) \(.y) \(.scale)"'
+)
+
+if [[ -z "${current_refresh:-}" || "$current_refresh" == "null" ]]; then
+  exit 0
+fi
+
+current_hz=$(printf "%.0f" "$current_refresh")
+if (( current_hz < 90 )); then
+  target_hz=$HIGH_HZ
+else
+  target_hz=$LOW_HZ
+fi
+
+mode_prefix="${width}x${height}@${target_hz}"
+has_mode=$(echo "$monitors_json" | jq -r --arg m "$monitor" --arg p "$mode_prefix" 'any(.[] | select(.name==$m) | .availableModes[]; startswith($p))')
+
+if [[ "$has_mode" != "true" ]]; then
+  notify-send "Refresh rate" "${monitor}: ${mode_prefix} not available" -t 2000
+  exit 1
+fi
+
+hyprctl keyword monitor "${monitor},${width}x${height}@${target_hz},${x}x${y},${scale}" >/dev/null
+notify-send "Refresh rate" "${monitor}: ${target_hz}Hz" -t 1200

@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+MIN=${MIN:-1.0}
+MAX=${MAX:-4.0}
+ALLOWED_DENOMS=${ALLOWED_DENOMS:-"1,2,3,4,5,8,15"}
+
+usage() {
+  echo "Usage: $(basename "$0") up|down [monitor]" >&2
+}
+
+direction="${1:-}"
+case "$direction" in
+  up|down) ;;
+  *) usage; exit 2 ;;
+esac
+
+monitors_json=$(hyprctl monitors -j)
+
+monitor="${2:-}"
+if [[ -z "$monitor" ]]; then
+  monitor=$(echo "$monitors_json" | jq -r '.[] | select(.focused==true) | .name')
+fi
+
+if [[ -z "$monitor" || "$monitor" == "null" ]]; then
+  exit 0
+fi
+
+read -r current_refresh width height x y scale < <(
+  echo "$monitors_json" | jq -r --arg m "$monitor" '.[] | select(.name==$m) | "\(.refreshRate) \(.width) \(.height) \(.x) \(.y) \(.scale)"'
+)
+
+if [[ -z "${scale:-}" || "$scale" == "null" ]]; then
+  exit 0
+fi
+
+current_hz=$(printf "%.0f" "$current_refresh")
+
+next_scale=$(
+  DIR="$direction" CUR="$scale" W="$width" H="$height" MIN="$MIN" MAX="$MAX" ALLOWED="$ALLOWED_DENOMS" \
+  python - <<'PY'
+import math
+import os
+from fractions import Fraction
+
+allowed = {int(x) for x in os.environ["ALLOWED"].split(",") if x.strip()}
+
+cur = float(os.environ["CUR"])
+w = int(os.environ["W"])
+h = int(os.environ["H"])
+minv = float(os.environ["MIN"])
+maxv = float(os.environ["MAX"])
+direction = os.environ["DIR"]
+
+g = math.gcd(w, h)
+base = g * 120
+
+def divisors(n: int):
+    ds = set()
+    r = int(n ** 0.5)
+    for i in range(1, r + 1):
+        if n % i == 0:
+            ds.add(i)
+            ds.add(n // i)
+    return sorted(ds)
+
+scales = []
+for d in divisors(base):
+    frac = Fraction(d, 120)
+    if frac.denominator not in allowed:
+        continue
+    val = float(frac)
+    if minv - 1e-9 <= val <= maxv + 1e-9:
+        scales.append(frac)
+
+scales = sorted(set(scales), key=float)
+if not scales:
+    print(cur)
+    raise SystemExit(0)
+
+nearest = min(scales, key=lambda f: abs(float(f) - cur))
+if abs(float(nearest) - cur) <= 0.03:
+    cur = float(nearest)
+
+idx = min(range(len(scales)), key=lambda i: abs(float(scales[i]) - cur))
+
+if direction == "up":
+    idx = min(idx + 1, len(scales) - 1)
+else:
+    idx = max(idx - 1, 0)
+
+nxt = float(scales[idx])
+print(f"{nxt:.7f}".rstrip("0").rstrip("."))
+PY
+)
+
+hyprctl keyword monitor "${monitor},${width}x${height}@${current_hz},${x}x${y},${next_scale}" >/dev/null
+
+new_scale=$(hyprctl monitors -j | jq -r --arg m "$monitor" '.[] | select(.name==$m) | .scale')
+if [[ -z "$new_scale" || "$new_scale" == "null" ]]; then
+  new_scale="$next_scale"
+fi
+
+pct=$(python - <<PY
+print(int(round(float("$new_scale") * 100)))
+PY
+)
+
+notify-send "Monitor scale" "${monitor}: ${new_scale}x (${pct}%)" -t 1200

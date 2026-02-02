@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Adjust Hyprland's global blur strength.
+# Note: Hyprland blur is global (decoration:blur:*). It mostly matters when windows/layers are transparent.
+
+STEP=${STEP:-1}
+MIN=${MIN:-0}
+MAX=${MAX:-20}
+
+usage() {
+  echo "Usage: $(basename "$0") up|down" >&2
+}
+
+direction="${1:-}"
+case "$direction" in
+  up|down) ;;
+  *) usage; exit 2 ;;
+esac
+
+current=$(hyprctl -j getoption decoration:blur:size | jq -r '.int')
+if [[ -z "$current" || "$current" == "null" ]]; then
+  current=0
+fi
+
+if [[ "$direction" == "up" ]]; then
+  next=$((current + STEP))
+else
+  next=$((current - STEP))
+fi
+
+if (( next < MIN )); then
+  next=$MIN
+elif (( next > MAX )); then
+  next=$MAX
+fi
+
+# Ensure blur stays enabled when adjusting
+hyprctl keyword decoration:blur:enabled 1 >/dev/null
+hyprctl keyword decoration:blur:size "$next" >/dev/null
+
+passes=$(hyprctl -j getoption decoration:blur:passes | jq -r '.int')
+notify-send "Blur" "size=${next}, passes=${passes}" -t 1200

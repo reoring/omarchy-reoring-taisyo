@@ -1,0 +1,12 @@
+[Unit]
+Description=Inhibit suspend on lid close (toggle)
+Documentation=man:systemd-inhibit(1)
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/systemd-inhibit --what=handle-lid-switch --mode=block --why="User toggle: keep system awake when lid closes" /usr/bin/sleep infinity
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target

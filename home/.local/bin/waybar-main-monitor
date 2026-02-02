@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+STATE_FILE="${XDG_CACHE_HOME:-$HOME/.cache}/hypr-main-role"
+INTERNAL_RE='^(eDP|LVDS|DSI)-'
+
+monitors_json=$(hyprctl monitors -j 2>/dev/null || echo '[]')
+
+internal=$(echo "$monitors_json" | jq -r --arg re "$INTERNAL_RE" '[.[] | select(.name | test($re)) | .name][0] // empty')
+external=$(echo "$monitors_json" | jq -r --arg re "$INTERNAL_RE" '[.[] | select((.name | test($re)) | not) | .name][0] // empty')
+
+role=""
+if [[ -f "$STATE_FILE" ]]; then
+  role=$(cat "$STATE_FILE" 2>/dev/null || true)
+fi
+
+if [[ "$role" != "internal" && "$role" != "external" ]]; then
+  focused=$(echo "$monitors_json" | jq -r '.[] | select(.focused == true) | .name' | head -n 1)
+  if [[ -n "${focused:-}" && "$focused" =~ $INTERNAL_RE ]]; then
+    role="internal"
+  else
+    role="external"
+  fi
+fi
+
+# Normalize when only one monitor is present.
+if [[ -z "$external" ]]; then
+  role="internal"
+fi
+if [[ -z "$internal" ]]; then
+  role="external"
+fi
+
+if [[ "$role" == "external" ]]; then
+  main_monitor="$external"
+  icon=""
+  klass="external"
+else
+  main_monitor="$internal"
+  icon=""
+  klass="internal"
+fi
+
+tooltip=$(cat <<EOF
+Main monitor: ${main_monitor:-unknown} (${role})
+
+Click: toggle main (Super+Ctrl+M)
+AltGr+QWERTASDFG: main workspaces
+AltGr+Z/X/C/V/B: parking (when external connected)
+EOF
+)
+
+jq -nc --arg text "$icon" --arg tooltip "$tooltip" --arg class "$klass" '{text: $text, tooltip: $tooltip, class: $class}'
