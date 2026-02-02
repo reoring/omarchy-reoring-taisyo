@@ -24,6 +24,10 @@ Highlights:
 
 ## What's included (files)
 
+- Fcitx5
+  - `~/.config/environment.d/90-fcitx5.conf`, `~/.config/environment.d/fcitx.conf` (IME env vars)
+  - `~/.config/fcitx5/config`, `~/.config/fcitx5/profile` (hotkeys + default IM)
+  - `~/.config/fcitx5/conf/*.conf` (small addon tweaks)
 - Hyprland
   - `~/.config/hypr/bindings.conf` (AltGr workspace workflow, vim-style focus movement, adjustment keybinds)
   - `~/.config/hypr/hypridle.conf` (lock/DPMS timeout tweaks)
@@ -59,6 +63,7 @@ Re-running is safe: unchanged files are detected and skipped.
 Options:
 
 - `--dry-run` Print planned actions only
+- `--skip-packages` Skip package install via yay
 - `--no-waybar` Skip Waybar config/scripts
 - `--with-shaders` Symlink `~/.config/hypr/shaders` from `/usr/share/aether/shaders`
 - `--force-monitors` Always install `~/.config/hypr/monitors.conf` (even if DP-4 is not detected)
@@ -69,6 +74,7 @@ Options:
 
 - Omarchy + Hyprland setup (these files/scripts call Omarchy helpers like `omarchy-launch-*`)
 - Tools commonly available on Omarchy systems: `bash`, `install`, `python` (3.x), `hyprctl`, `jq`, `systemctl --user`, `notify-send`
+- `yay` (used by default to install fcitx5-related packages; skip with `--skip-packages`)
 - Waybar (only if you install Waybar config)
 
 ## Customize

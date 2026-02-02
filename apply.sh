@@ -10,6 +10,7 @@ WITH_SHADERS=0
 FORCE_MONITORS=0
 FORCE_NVIDIA_ENV=0
 SKIP_NVIDIA_ENV=0
+SKIP_PACKAGES=0
 
 usage() {
   cat <<'EOF'
@@ -17,6 +18,7 @@ Usage: apply.sh [options]
 
 Options:
   --dry-run            Print actions without changing files
+  --skip-packages      Skip package install via yay
   --no-waybar          Skip Waybar config/scripts
   --with-shaders       Symlink ~/.config/hypr/shaders from /usr/share/aether/shaders
   --force-monitors     Always install ~/.config/hypr/monitors.conf
@@ -29,6 +31,7 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN=1 ;;
+    --skip-packages) SKIP_PACKAGES=1 ;;
     --no-waybar) NO_WAYBAR=1 ;;
     --with-shaders) WITH_SHADERS=1 ;;
     --force-monitors) FORCE_MONITORS=1 ;;
@@ -58,6 +61,34 @@ run() {
     return 0
   fi
   "$@"
+}
+
+install_yay_packages() {
+  if (( SKIP_PACKAGES )); then
+    log "skip: packages (--skip-packages)"
+    return 0
+  fi
+
+  if ! command -v yay >/dev/null 2>&1; then
+    log "note: yay not found; skipping package install"
+    return 0
+  fi
+
+  # Derived from reoring's current install state.
+  local -a pkgs=(
+    fcitx5
+    fcitx5-configtool
+    fcitx5-gtk
+    fcitx5-qt
+    cskk-git
+    cskk-git-debug
+    fcitx5-cskk-git
+    fcitx5-cskk-git-debug
+    skk-jisyo
+  )
+
+  log "Installing packages via yay (may prompt for sudo): ${pkgs[*]}"
+  run yay -S --needed "${pkgs[@]}" || log "note: yay package install failed; continuing"
 }
 
 backup_if_needed() {
@@ -169,6 +200,17 @@ PY
 }
 
 log "Applying reoring customizations to: $HOME"
+
+install_yay_packages
+
+# Fcitx5 (IME)
+install_file "$SRC_HOME/.config/environment.d/90-fcitx5.conf" "$HOME/.config/environment.d/90-fcitx5.conf" 0644
+install_file "$SRC_HOME/.config/environment.d/fcitx.conf" "$HOME/.config/environment.d/fcitx.conf" 0644
+install_file "$SRC_HOME/.config/fcitx5/config" "$HOME/.config/fcitx5/config" 0644
+install_file "$SRC_HOME/.config/fcitx5/profile" "$HOME/.config/fcitx5/profile" 0644
+install_file "$SRC_HOME/.config/fcitx5/conf/notifications.conf" "$HOME/.config/fcitx5/conf/notifications.conf" 0644
+install_file "$SRC_HOME/.config/fcitx5/conf/xcb.conf" "$HOME/.config/fcitx5/conf/xcb.conf" 0644
+install_file "$SRC_HOME/.config/fcitx5/conf/clipboard.conf" "$HOME/.config/fcitx5/conf/clipboard.conf" 0644
 
 # Hyprland user configs
 install_file "$SRC_HOME/.config/hypr/bindings.conf" "$HOME/.config/hypr/bindings.conf" 0644
