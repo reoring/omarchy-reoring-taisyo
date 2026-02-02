@@ -10,6 +10,7 @@ WITH_SHADERS=0
 FORCE_MONITORS=0
 FORCE_NVIDIA_ENV=0
 SKIP_NVIDIA_ENV=0
+CHECK_ONLY=0
 SKIP_PACKAGES=0
 
 usage() {
@@ -17,6 +18,7 @@ usage() {
 Usage: apply.sh [options]
 
 Options:
+  --check              Print environment/repo checks and exit
   --dry-run            Print actions without changing files
   --skip-packages      Skip package install via yay
   --no-waybar          Skip Waybar config/scripts
@@ -30,6 +32,7 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --check) CHECK_ONLY=1 ;;
     --dry-run) DRY_RUN=1 ;;
     --skip-packages) SKIP_PACKAGES=1 ;;
     --no-waybar) NO_WAYBAR=1 ;;
@@ -49,6 +52,96 @@ done
 
 log() {
   printf '%s\n' "$*" >&2
+}
+
+preflight() {
+  log "Preflight check"
+  log "repo: $ROOT"
+  log "source: $SRC_HOME"
+  log
+
+  if [[ ! -d "$SRC_HOME" ]]; then
+    log "ERROR: missing source directory: $SRC_HOME"
+    return 1
+  fi
+
+  local missing=0
+  local f
+  for f in \
+    .config/environment.d/90-fcitx5.conf \
+    .config/environment.d/fcitx.conf \
+    .config/fcitx5/config \
+    .config/fcitx5/profile \
+    .config/fcitx5/conf/clipboard.conf \
+    .config/fcitx5/conf/notifications.conf \
+    .config/fcitx5/conf/xcb.conf \
+    .config/hypr/bindings.conf \
+    .config/hypr/hypridle.conf \
+    .config/hypr/input.conf \
+    .config/hypr/monitors.conf \
+    .config/hypr/envs.conf \
+    .config/systemd/user/lid-nosuspend.service \
+    .config/waybar/config.jsonc \
+    .config/waybar/style.css \
+    .local/bin/hypr-ws \
+    .local/bin/hyprsunset-adjust \
+    .local/bin/hypr-opacity-adjust \
+    .local/bin/hypr-blur-adjust \
+    .local/bin/hypr-gaps-adjust \
+    .local/bin/hypr-scale-adjust \
+    .local/bin/hypr-refresh-toggle \
+    .local/bin/hypr-main-monitor-toggle \
+    .local/bin/hypr-internal-display-toggle \
+    .local/bin/hypr-lid-suspend-toggle \
+    .local/bin/waybar-main-monitor \
+    .local/bin/waybar-lid-suspend
+  do
+    if [[ -f "$SRC_HOME/$f" ]]; then
+      log "ok: $f"
+    else
+      log "MISSING: $f"
+      missing=1
+    fi
+  done
+
+  log
+
+  local c
+  for c in install cp mkdir cmp date; do
+    if command -v "$c" >/dev/null 2>&1; then
+      log "cmd: $c"
+    else
+      log "cmd: $c (missing)"
+    fi
+  done
+
+  for c in python python3 jq hyprctl systemctl notify-send omarchy-restart-waybar yay; do
+    if command -v "$c" >/dev/null 2>&1; then
+      log "cmd: $c"
+    else
+      log "cmd: $c (missing)"
+    fi
+  done
+
+  log
+  if detect_nvidia; then
+    log "detect: nvidia=yes"
+  else
+    log "detect: nvidia=no"
+  fi
+  if hyprctl_has_monitor "DP-4"; then
+    log "detect: monitor DP-4=yes"
+  else
+    log "detect: monitor DP-4=no/unknown"
+  fi
+
+  if (( missing )); then
+    log
+    log "ERROR: repo is missing required source files"
+    return 1
+  fi
+
+  return 0
 }
 
 ts() {
@@ -198,6 +291,11 @@ PY
 
   log "updated: $file"
 }
+
+if (( CHECK_ONLY )); then
+  preflight
+  exit $?
+fi
 
 log "Applying reoring customizations to: $HOME"
 

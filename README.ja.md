@@ -56,10 +56,17 @@ Omarchy (Hyprland) の標準設定に、reoring のカスタム設定/スクリ�
 bash ./apply.sh
 ```
 
+事前チェック（変更なし）:
+
+```sh
+bash ./apply.sh --check
+```
+
 同じコマンドを再実行しても安全です（差分がないファイルはスキップされます）。
 
 オプション:
 
+- `--check` 環境/リポジトリの事前チェックだけ実行して終了
 - `--dry-run` 変更内容だけ表示
 - `--skip-packages` yay によるパッケージ導入をスキップ
 - `--no-waybar` Waybar関連をスキップ
@@ -87,6 +94,18 @@ bash ./apply.sh
 ## ロールバック
 
 上書き前に `*.bak.YYYYmmdd-HHMMSS` を同じパスに作成します。
+
+このリポジトリが管理するファイルについて、最新バックアップへ戻す:
+
+```sh
+bash ./rollback.sh
+```
+
+dry-run:
+
+```sh
+bash ./rollback.sh --dry-run
+```
 
 ## ライセンス
 

@@ -73,7 +73,8 @@ current_ws=$(hyprctl activeworkspace -j | jq -r '.id')
 
 workspaces=$(hyprctl workspaces -j | jq -r '.[].id' | sort -n | uniq)
 
-for ws in $workspaces; do
+while IFS= read -r ws; do
+  [[ -z "$ws" ]] && continue
   [[ "$ws" == "0" ]] && continue
 
   if (( ws >= PARK_MIN && ws <= PARK_MAX )); then
@@ -83,7 +84,7 @@ for ws in $workspaces; do
   else
     hyprctl dispatch moveworkspacetomonitor "$ws $main_monitor" >/dev/null
   fi
-done
+done <<<"$workspaces"
 
 # Ensure the non-main monitor is always showing a parking workspace when present.
 if [[ -n "$parking_monitor" ]]; then

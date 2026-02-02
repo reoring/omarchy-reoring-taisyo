@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Bash syntax check
+        run: |
+          bash -n apply.sh
+          bash -n rollback.sh
+          bash -n home/.local/bin/*
+          bash -n tests/*.sh
+
+      - name: Shellcheck
+        run: |
+          shellcheck -S warning apply.sh rollback.sh home/.local/bin/* tests/*.sh
+
+      - name: Tests
+        run: |
+          bash tests/run.sh
