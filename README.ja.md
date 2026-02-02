@@ -22,6 +22,10 @@ Omarchy (Hyprland) の標準設定に、reoring のカスタム設定/スクリ�
 
 ## 含まれるもの（ファイル）
 
+- Fcitx5
+  - `~/.config/environment.d/90-fcitx5.conf`, `~/.config/environment.d/fcitx.conf`（IME の環境変数）
+  - `~/.config/fcitx5/config`, `~/.config/fcitx5/profile`（ホットキー + デフォルトIM）
+  - `~/.config/fcitx5/conf/*.conf`（アドオンの小さな調整）
 - Hyprland
   - `~/.config/hypr/bindings.conf`（AltGr ワークスペース運用、vim風フォーカス移動、各種調整キーなど）
   - `~/.config/hypr/hypridle.conf`（ロック/DPMS タイムアウトの調整）
@@ -57,6 +61,7 @@ bash ./apply.sh
 オプション:
 
 - `--dry-run` 変更内容だけ表示
+- `--skip-packages` yay によるパッケージ導入をスキップ
 - `--no-waybar` Waybar関連をスキップ
 - `--with-shaders` `~/.config/hypr/shaders` を `/usr/share/aether/shaders` からsymlink生成
 - `--force-monitors` `~/.config/hypr/monitors.conf` を強制適用（未検出でも）
@@ -67,6 +72,7 @@ bash ./apply.sh
 
 - Omarchy + Hyprland 環境（`omarchy-launch-*` など Omarchy の helper を呼びます）
 - よく使うコマンド: `bash`, `install`, `python`（3系）, `hyprctl`, `jq`, `systemctl --user`, `notify-send`
+- `yay`（デフォルトで fcitx5 関連パッケージをインストールします。不要なら `--skip-packages`）
 - Waybar（Waybar 関連を適用する場合）
 
 ## カスタマイズ
