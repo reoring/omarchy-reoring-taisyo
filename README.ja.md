@@ -1,10 +1,26 @@
 # omarchy-reoring-taisyo
 
-Omarchy (Hyprland) の標準設定に、reoring のカスタム部分を上書き適用するためのスナップショットです。
+Omarchy (Hyprland) の標準設定に、reoring のカスタム設定/スクリプトを上書き適用するためのバンドルです。
 
-このディレクトリは `~/.local/share/omarchy/` には触れず、ユーザー設定 (`~/.config/*`, `~/.local/bin/*`) のみを更新します。
+このディレクトリは `~/.local/share/omarchy/`（Omarchy 管理ファイル）には触れず、ユーザー設定 (`~/.config/*`, `~/.local/bin/*`) のみを更新します。
 
-## 含まれるもの
+`apply.sh` は `home/` 以下を `$HOME` にコピーし、上書き前にタイムスタンプ付きバックアップを作成します。
+
+ドキュメント:
+
+- English README: `README.md`
+- Hyprland ショートカットガイド: `docs/user-guide.md` (EN) / `user-guide.ja.md` (JA)
+
+## 何ができるか（要点）
+
+- AltGr を使ったワークスペース運用（"main monitor" 概念 + もう一方に parking ワークスペース）
+- vim 風フォーカス移動（`Super+H/J/K/L`）と、`hypr-*` の各種調整/トグル（opacity/blur/gaps/scale/refresh/nightlight など）
+- Waybar に "main monitor" / ふた閉じサスペンド状態を表示（クリックでトグル）
+- ハードウェア依存の設定を必要時のみ適用:
+  - `monitors.conf` は `DP-4` を検出したときだけ適用（または `--force-monitors`）
+  - `envs.conf` は NVIDIA を検出したときだけ適用（または `--force-nvidia-env`）。さらに `apply.sh` が `~/.config/hypr/hyprland.conf` に source 行を追加します
+
+## 含まれるもの（ファイル）
 
 - Hyprland
   - `~/.config/hypr/bindings.conf`（AltGr ワークスペース運用、vim風フォーカス移動、各種調整キーなど）
@@ -22,12 +38,21 @@ Omarchy (Hyprland) の標準設定に、reoring のカスタム部分を上書�
   - `~/.local/bin/hypr-ws`（main/park 概念でワークスペース移動）
   - `~/.local/bin/hypr-*-adjust` / `hypr-*-toggle`（opacity/blur/gaps/scale/refresh/main-monitor/internal-display/lid）
 
+補足:
+
+- NVIDIA env を適用する場合、`apply.sh` は `~/.config/hypr/hyprland.conf` に `source = ~/.config/hypr/envs.conf` を挿入/追記することがあります。
+- キーバインドは個人設定寄りです（Spotify/Signal/1Password/Web アプリなど）。必要に応じて `~/.config/hypr/bindings.conf` を編集してください（ショートカットガイド参照）。
+- 外部モニター名が `DP-4` でない場合は `home/.config/hypr/monitors.conf` を調整し、`--force-monitors` で適用してください。
+
 ## 使い方
 
+このディレクトリで:
+
 ```sh
-cd omarchy-reoring-taisyo
 bash ./apply.sh
 ```
+
+同じコマンドを再実行しても安全です（差分がないファイルはスキップされます）。
 
 オプション:
 
@@ -38,6 +63,16 @@ bash ./apply.sh
 - `--force-nvidia-env` `~/.config/hypr/envs.conf` を強制適用（未検出でも）
 - `--skip-nvidia-env` NVIDIA env 適用を常にスキップ
 
+## 前提 / 依存
+
+- Omarchy + Hyprland 環境（`omarchy-launch-*` など Omarchy の helper を呼びます）
+- よく使うコマンド: `bash`, `install`, `python`（3系）, `hyprctl`, `jq`, `systemctl --user`, `notify-send`
+- Waybar（Waybar 関連を適用する場合）
+
+## カスタマイズ
+
+- `home/` 以下を編集して `bash ./apply.sh` を再実行するか、適用後の `~/.config/` / `~/.local/bin/` を直接編集してください。
+
 適用後:
 
 - Hyprland: 通常は自動リロードしますが、必要なら `hyprctl reload`
@@ -46,3 +81,7 @@ bash ./apply.sh
 ## ロールバック
 
 上書き前に `*.bak.YYYYmmdd-HHMMSS` を同じパスに作成します。
+
+## ライセンス
+
+MIT（`LICENSE` 参照）。
