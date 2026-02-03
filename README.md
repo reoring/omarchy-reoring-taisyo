@@ -40,6 +40,7 @@ Highlights:
   - `~/.local/bin/waybar-main-monitor`, `~/.local/bin/waybar-lid-suspend`
 - systemd (user)
   - `~/.config/systemd/user/lid-nosuspend.service` (toggle-style inhibitor for lid-close suspend)
+  - `~/.config/systemd/user/app-org.fcitx.Fcitx5@autostart.service.d/override.conf` (fix: make `fcitx5-cskk` find `libcskk` when using `cskk-git`)
 - Scripts
   - `~/.local/bin/hypr-ws` (main/park workspace routing)
   - `~/.local/bin/hypr-*-adjust` / `hypr-*-toggle` (opacity/blur/gaps/scale/refresh/main-monitor/internal-display/lid)

@@ -38,6 +38,7 @@ Omarchy (Hyprland) の標準設定に、reoring のカスタム設定/スクリ�
   - `~/.local/bin/waybar-main-monitor`, `~/.local/bin/waybar-lid-suspend`
 - systemd (user)
   - `~/.config/systemd/user/lid-nosuspend.service`（lid close の suspend を inhibit するトグル用）
+  - `~/.config/systemd/user/app-org.fcitx.Fcitx5@autostart.service.d/override.conf`（`cskk-git` 利用時に `fcitx5-cskk` が `libcskk` を見つけられるようにする）
 - スクリプト
   - `~/.local/bin/hypr-ws`（main/park 概念でワークスペース移動）
   - `~/.local/bin/hypr-*-adjust` / `hypr-*-toggle`（opacity/blur/gaps/scale/refresh/main-monitor/internal-display/lid）

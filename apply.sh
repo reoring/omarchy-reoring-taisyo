@@ -354,8 +354,17 @@ install_file "$SRC_HOME/.local/bin/hypr-lid-suspend-toggle" "$HOME/.local/bin/hy
 
 # systemd user service for lid toggle
 install_file "$SRC_HOME/.config/systemd/user/lid-nosuspend.service" "$HOME/.config/systemd/user/lid-nosuspend.service" 0644
+
+# Fcitx5: cskk addon depends on libcskk (cskk-git installs it under /usr/lib/cskk).
+install_file \
+  "$SRC_HOME/.config/systemd/user/app-org.fcitx.Fcitx5@autostart.service.d/override.conf" \
+  "$HOME/.config/systemd/user/app-org.fcitx.Fcitx5@autostart.service.d/override.conf" \
+  0644
 if command -v systemctl >/dev/null 2>&1; then
   run systemctl --user daemon-reload >/dev/null 2>&1 || true
+
+  # Apply the new env immediately when possible.
+  run systemctl --user try-restart app-org.fcitx.Fcitx5@autostart.service >/dev/null 2>&1 || true
 fi
 
 # Waybar (optional)
