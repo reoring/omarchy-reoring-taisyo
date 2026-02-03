@@ -72,6 +72,8 @@ Options:
 - `--check` Print environment/repo checks and exit
 - `--dry-run` Print planned actions only
 - `--skip-packages` Skip package install via yay
+- `--gtk-gsettings` Also set GTK prefs via gsettings (Emacs keys + button layout) (enabled by default)
+- `--no-gtk-gsettings` Do not touch GTK gsettings
 - `--no-waybar` Skip Waybar config/scripts
 - `--with-shaders` Symlink `~/.config/hypr/shaders` from `/usr/share/aether/shaders`
 - `--force-monitors` Always install `~/.config/hypr/monitors.conf` (even if DP-4 is not detected)

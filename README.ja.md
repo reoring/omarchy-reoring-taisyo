@@ -70,6 +70,8 @@ bash ./apply.sh --check
 - `--check` 環境/リポジトリの事前チェックだけ実行して終了
 - `--dry-run` 変更内容だけ表示
 - `--skip-packages` yay によるパッケージ導入をスキップ
+- `--gtk-gsettings` GTK の設定を gsettings にも反映（Emacs風キー + ウィンドウボタン配置）。デフォルトで有効
+- `--no-gtk-gsettings` GTK の gsettings 反映を行わない
 - `--no-waybar` Waybar関連をスキップ
 - `--with-shaders` `~/.config/hypr/shaders` を `/usr/share/aether/shaders` からsymlink生成
 - `--force-monitors` `~/.config/hypr/monitors.conf` を強制適用（未検出でも）

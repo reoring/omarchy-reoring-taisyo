@@ -104,6 +104,8 @@ log "Rolling back reoring customizations in: $HOME"
 dests=(
   "$HOME/.config/environment.d/90-fcitx5.conf"
   "$HOME/.config/environment.d/fcitx.conf"
+  "$HOME/.config/gtk-3.0/settings.ini"
+  "$HOME/.config/gtk-4.0/settings.ini"
   "$HOME/.config/fcitx5/config"
   "$HOME/.config/fcitx5/profile"
   "$HOME/.config/fcitx5/conf/clipboard.conf"

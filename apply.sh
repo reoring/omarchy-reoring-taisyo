@@ -12,6 +12,7 @@ FORCE_NVIDIA_ENV=0
 SKIP_NVIDIA_ENV=0
 CHECK_ONLY=0
 SKIP_PACKAGES=0
+APPLY_GTK_GSETTINGS=1
 
 usage() {
   cat <<'EOF'
@@ -21,6 +22,8 @@ Options:
   --check              Print environment/repo checks and exit
   --dry-run            Print actions without changing files
   --skip-packages      Skip package install via yay
+  --gtk-gsettings       Also set GTK prefs via gsettings (Emacs keys + button layout) [default]
+  --no-gtk-gsettings    Do not touch GTK gsettings
   --no-waybar          Skip Waybar config/scripts
   --with-shaders       Symlink ~/.config/hypr/shaders from /usr/share/aether/shaders
   --force-monitors     Always install ~/.config/hypr/monitors.conf
@@ -35,6 +38,8 @@ while [[ $# -gt 0 ]]; do
     --check) CHECK_ONLY=1 ;;
     --dry-run) DRY_RUN=1 ;;
     --skip-packages) SKIP_PACKAGES=1 ;;
+    --gtk-gsettings) APPLY_GTK_GSETTINGS=1 ;;
+    --no-gtk-gsettings) APPLY_GTK_GSETTINGS=0 ;;
     --no-waybar) NO_WAYBAR=1 ;;
     --with-shaders) WITH_SHADERS=1 ;;
     --force-monitors) FORCE_MONITORS=1 ;;
@@ -70,6 +75,8 @@ preflight() {
   for f in \
     .config/environment.d/90-fcitx5.conf \
     .config/environment.d/fcitx.conf \
+    .config/gtk-3.0/settings.ini \
+    .config/gtk-4.0/settings.ini \
     .config/fcitx5/config \
     .config/fcitx5/profile \
     .config/fcitx5/conf/clipboard.conf \
@@ -304,11 +311,36 @@ install_yay_packages
 # Fcitx5 (IME)
 install_file "$SRC_HOME/.config/environment.d/90-fcitx5.conf" "$HOME/.config/environment.d/90-fcitx5.conf" 0644
 install_file "$SRC_HOME/.config/environment.d/fcitx.conf" "$HOME/.config/environment.d/fcitx.conf" 0644
+
+# GTK (key theme / window controls)
+install_file "$SRC_HOME/.config/gtk-3.0/settings.ini" "$HOME/.config/gtk-3.0/settings.ini" 0644
+install_file "$SRC_HOME/.config/gtk-4.0/settings.ini" "$HOME/.config/gtk-4.0/settings.ini" 0644
+
 install_file "$SRC_HOME/.config/fcitx5/config" "$HOME/.config/fcitx5/config" 0644
 install_file "$SRC_HOME/.config/fcitx5/profile" "$HOME/.config/fcitx5/profile" 0644
 install_file "$SRC_HOME/.config/fcitx5/conf/notifications.conf" "$HOME/.config/fcitx5/conf/notifications.conf" 0644
 install_file "$SRC_HOME/.config/fcitx5/conf/xcb.conf" "$HOME/.config/fcitx5/conf/xcb.conf" 0644
 install_file "$SRC_HOME/.config/fcitx5/conf/clipboard.conf" "$HOME/.config/fcitx5/conf/clipboard.conf" 0644
+
+apply_gtk_gsettings() {
+  if ! command -v gsettings >/dev/null 2>&1; then
+    log "note: gsettings not found; skipping GTK gsettings"
+    return 0
+  fi
+
+  # Best-effort: in many GTK setups, XSettings/GSettings override ~/.config/gtk-*/settings.ini.
+  # These keys are commonly consumed by GTK apps (especially on GNOME/libadwaita stacks).
+  run gsettings set org.gnome.desktop.interface gtk-key-theme 'Emacs' \
+    || log "note: failed to set org.gnome.desktop.interface gtk-key-theme"
+  run gsettings set org.gnome.desktop.wm.preferences button-layout 'close,minimize,maximize:' \
+    || log "note: failed to set org.gnome.desktop.wm.preferences button-layout"
+}
+
+if (( APPLY_GTK_GSETTINGS )); then
+  apply_gtk_gsettings
+else
+  log "note: skipping GTK gsettings (--no-gtk-gsettings)"
+fi
 
 # Hyprland user configs
 install_file "$SRC_HOME/.config/hypr/bindings.conf" "$HOME/.config/hypr/bindings.conf" 0644
