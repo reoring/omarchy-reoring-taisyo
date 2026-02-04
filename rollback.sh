@@ -126,6 +126,7 @@ dests=(
   "$HOME/.local/bin/hypr-scale-adjust"
   "$HOME/.local/bin/hypr-refresh-toggle"
   "$HOME/.local/bin/hypr-main-monitor-toggle"
+  "$HOME/.local/bin/hypr-monitor-position"
   "$HOME/.local/bin/hypr-internal-display-toggle"
   "$HOME/.local/bin/hypr-lid-suspend-toggle"
 

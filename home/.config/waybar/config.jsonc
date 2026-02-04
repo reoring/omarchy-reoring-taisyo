@@ -65,6 +65,7 @@
   "custom/main-monitor": {
     "exec": "$HOME/.local/bin/waybar-main-monitor",
     "on-click": "$HOME/.local/bin/hypr-main-monitor-toggle",
+    "on-click-right": "$HOME/.local/bin/hypr-monitor-position menu",
     "signal": 10,
     "interval": 3600,
     "return-type": "json"

@@ -1,0 +1,203 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+INTERNAL_RE='^(eDP|LVDS|DSI)-'
+STATE_FILE="${XDG_CACHE_HOME:-$HOME/.cache}/hypr-external-position"
+
+usage() {
+  cat <<'EOF' >&2
+Usage:
+  hypr-monitor-position            # open menu
+  hypr-monitor-position menu       # open menu
+  hypr-monitor-position left|right|up|down
+EOF
+}
+
+notify() {
+  local title="$1"
+  local body="$2"
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send "$title" "$body" -t 1500 >/dev/null 2>&1 || true
+  fi
+}
+
+get_monitors_json() {
+  hyprctl monitors all -j 2>/dev/null || hyprctl monitors -j 2>/dev/null || printf '%s\n' '[]'
+}
+
+apply_layout() {
+  local dir="$1"
+
+  local monitors_json
+  monitors_json="$(get_monitors_json)"
+
+  local internal external
+  internal=$(
+    echo "$monitors_json" | jq -r --arg re "$INTERNAL_RE" \
+      '[.[]
+        | select(.name | test($re))
+        | select((.disabled // false) == false)
+        | .name
+      ][0] // empty'
+  )
+  external=$(
+    echo "$monitors_json" | jq -r --arg re "$INTERNAL_RE" \
+      '[.[]
+        | select((.name | test($re)) | not)
+        | select((.disabled // false) == false)
+        | .name
+      ][0] // empty'
+  )
+
+  if [[ -z "$internal" || -z "$external" ]]; then
+    notify "Monitor layout" "No internal/external monitor pair found"
+    exit 0
+  fi
+
+  local focused
+  focused=$(echo "$monitors_json" | jq -r '.[] | select(.focused == true) | .name' | head -n 1)
+
+  local iw ih iscale irefresh
+  read -r iw ih iscale irefresh < <(
+    echo "$monitors_json" | jq -r --arg m "$internal" \
+      '.[] | select(.name==$m) | "\(.width) \(.height) \(.scale) \(.refreshRate)"'
+  )
+  local ew eh escale erefresh
+  read -r ew eh escale erefresh < <(
+    echo "$monitors_json" | jq -r --arg m "$external" \
+      '.[] | select(.name==$m) | "\(.width) \(.height) \(.scale) \(.refreshRate)"'
+  )
+
+  # Hyprland's global coordinate space is in logical pixels, so positions must be
+  # computed using each monitor's scale.
+  local ilw ilh elw elh
+  read -r ilw ilh elw elh < <(
+    IW="$iw" IH="$ih" IS="$iscale" EW="$ew" EH="$eh" ES="$escale" \
+      python - <<'PY'
+import os
+
+def f(x: str, default: float = 0.0) -> float:
+    try:
+        return float(x)
+    except Exception:
+        return default
+
+def logical(size: float, scale: float) -> int:
+    if scale <= 0:
+        return int(round(size))
+    return int(round(size / scale))
+
+iw = f(os.environ.get("IW", "0"))
+ih = f(os.environ.get("IH", "0"))
+is_ = f(os.environ.get("IS", "1"), 1.0)
+ew = f(os.environ.get("EW", "0"))
+eh = f(os.environ.get("EH", "0"))
+es = f(os.environ.get("ES", "1"), 1.0)
+
+print(logical(iw, is_), logical(ih, is_), logical(ew, es), logical(eh, es))
+PY
+  )
+
+  if [[ -z "${iw:-}" || -z "${ih:-}" || -z "${ew:-}" || -z "${eh:-}" ]]; then
+    notify "Monitor layout" "Failed to read monitor sizes"
+    exit 1
+  fi
+
+  local int_x=0 int_y=0 ext_x=0 ext_y=0
+  case "$dir" in
+    right)
+      int_x=0; int_y=0
+      ext_x="$ilw"; ext_y=0
+      ;;
+    left)
+      ext_x=0; ext_y=0
+      int_x="$elw"; int_y=0
+      ;;
+    down)
+      int_x=0; int_y=0
+      ext_x=0; ext_y="$ilh"
+      ;;
+    up)
+      ext_x=0; ext_y=0
+      int_x=0; int_y="$elh"
+      ;;
+    *)
+      usage
+      exit 2
+      ;;
+  esac
+
+  local ihz ehz
+  ihz=$(printf '%.0f' "${irefresh:-0}" 2>/dev/null || true)
+  ehz=$(printf '%.0f' "${erefresh:-0}" 2>/dev/null || true)
+
+  local int_mode ext_mode
+  if [[ -n "${ihz:-}" && "$ihz" != "0" ]]; then
+    int_mode="${iw}x${ih}@${ihz}"
+  else
+    int_mode="${iw}x${ih}"
+  fi
+  if [[ -n "${ehz:-}" && "$ehz" != "0" ]]; then
+    ext_mode="${ew}x${eh}@${ehz}"
+  else
+    ext_mode="${ew}x${eh}"
+  fi
+
+  hyprctl keyword monitor "${internal},${int_mode},${int_x}x${int_y},${iscale}" >/dev/null
+  hyprctl keyword monitor "${external},${ext_mode},${ext_x}x${ext_y},${escale}" >/dev/null
+
+  mkdir -p "$(dirname "$STATE_FILE")" 2>/dev/null || true
+  printf '%s' "$dir" >"$STATE_FILE" 2>/dev/null || true
+
+  if [[ -n "${focused:-}" && "$focused" != "null" ]]; then
+    hyprctl dispatch focusmonitor "$focused" >/dev/null 2>&1 || true
+  fi
+
+  notify "Monitor layout" "External position: $dir"
+}
+
+pick_from_menu() {
+  local current=""
+  if [[ -f "$STATE_FILE" ]]; then
+    current=$(cat "$STATE_FILE" 2>/dev/null || true)
+  fi
+  case "$current" in
+    left|right|up|down) ;;
+    *) current="" ;;
+  esac
+
+  local placeholder="External monitor position"
+  if [[ -n "$current" ]]; then
+    placeholder="External monitor position (current: $current)"
+  fi
+
+  local choice=""
+  if command -v walker >/dev/null 2>&1; then
+    choice=$(printf '%s\n' right left up down | walker --dmenu --placeholder "$placeholder" 2>/dev/null || true)
+  elif command -v fzf >/dev/null 2>&1; then
+    choice=$(printf '%s\n' right left up down | fzf --prompt='External monitor position> ' --height=40% --layout=reverse 2>/dev/null || true)
+  else
+    usage
+    exit 2
+  fi
+
+  [[ -z "$choice" ]] && exit 0
+  apply_layout "$choice"
+}
+
+cmd="${1:-menu}"
+case "$cmd" in
+  menu|"")
+    pick_from_menu
+    ;;
+  left|right|up|down)
+    apply_layout "$cmd"
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac

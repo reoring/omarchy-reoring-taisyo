@@ -2,6 +2,7 @@
 set -euo pipefail
 
 STATE_FILE="${XDG_CACHE_HOME:-$HOME/.cache}/hypr-main-role"
+LAYOUT_FILE="${XDG_CACHE_HOME:-$HOME/.cache}/hypr-external-position"
 INTERNAL_RE='^(eDP|LVDS|DSI)-'
 
 monitors_json=$(hyprctl monitors -j 2>/dev/null || echo '[]')
@@ -44,7 +45,10 @@ fi
 tooltip=$(cat <<EOF
 Main monitor: ${main_monitor:-unknown} (${role})
 
+External position: $(cat "$LAYOUT_FILE" 2>/dev/null || echo auto)
+
 Click: toggle main (Super+Ctrl+M)
+Right click: set external position (left/right/up/down)
 AltGr+QWERTASDFG: main workspaces (1-10)
 AltGr+ZXCVB: main workspaces (11-15)
 AltGr+YUIOPHJKL;: main workspaces (16-25)
