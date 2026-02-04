@@ -118,17 +118,26 @@ case "$phase" in
     log "pre: wwan_if=${WWAN_IF} pci_dev=${PCI_DEV}"
     rfkill block wwan 2>/dev/null || true
     ip link set "$WWAN_IF" down 2>/dev/null || true
+
+    # modprobe only takes a single module name; unload in a safe order.
+    modprobe -r mhi_wwan_mbim 2>/dev/null || true
+    modprobe -r mhi_wwan_ctrl 2>/dev/null || true
+    modprobe -r mhi_pci_generic 2>/dev/null || true
+    modprobe -r mhi 2>/dev/null || true
+
     if unbind_pci; then log "pre: unbound ${PCI_DEV}"; else log "pre: unbind skipped/failed"; fi
-    modprobe -r mhi_wwan_mbim mhi_wwan_ctrl mhi_pci_generic mhi 2>/dev/null
-    log "pre: modprobe -r rc=$?"
     ;;
   post)
     log "post: wwan_if=${WWAN_IF} pci_dev=${PCI_DEV}"
-    modprobe mhi_pci_generic 2>/dev/null
-    log "post: modprobe mhi_pci_generic rc=$?"
-    modprobe mhi_wwan_ctrl mhi_wwan_mbim 2>/dev/null
-    log "post: modprobe mhi_wwan_* rc=$?"
+
+    # Ensure the PCI driver is present and bind the device back.
+    modprobe mhi_pci_generic 2>/dev/null || true
     if bind_pci_mhi; then log "post: bound ${PCI_DEV}"; else log "post: bind skipped/failed"; fi
+
+    # Load data/control paths.
+    modprobe mhi_wwan_ctrl 2>/dev/null || true
+    modprobe mhi_wwan_mbim 2>/dev/null || true
+
     rfkill unblock wwan 2>/dev/null || true
     ;;
   *)
