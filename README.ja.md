@@ -15,7 +15,7 @@ Omarchy (Hyprland) の標準設定に、reoring のカスタム設定/スクリ�
 
 - AltGr を使ったワークスペース運用（"main monitor" 概念 + もう一方に parking ワークスペース）
 - vim 風フォーカス移動（`Super+H/J/K/L`）と、`hypr-*` の各種調整/トグル（opacity/blur/gaps/scale/refresh/nightlight など）
-- Waybar に "main monitor" / ふた閉じサスペンド状態を表示（クリックでトグル、外部モニター位置メニューあり）
+- Waybar に "main monitor" / ふた閉じサスペンド / キーボード掃除モードを表示（クリックでトグル、外部モニター位置メニューあり）
 - ハードウェア依存の設定を必要時のみ適用:
   - `monitors.conf` は `DP-4` を検出したときだけ適用（または `--force-monitors`）
   - `envs.conf` は NVIDIA を検出したときだけ適用（または `--force-nvidia-env`）。さらに `apply.sh` が `~/.config/hypr/hyprland.conf` に source 行を追加します
@@ -33,16 +33,16 @@ Omarchy (Hyprland) の標準設定に、reoring のカスタム設定/スクリ�
   - `~/.config/hypr/monitors.conf`（DP-4 を想定した追加設定。自動検出/強制オプションあり）
   - `~/.config/hypr/envs.conf`（NVIDIA向け env。自動検出/強制オプションあり）
 - Waybar
-  - `~/.config/waybar/config.jsonc`（main monitor / lid の custom モジュール追加）
+  - `~/.config/waybar/config.jsonc`（main monitor / lid / keyboard cleaning の custom モジュール追加）
   - `~/.config/waybar/style.css`（上記モジュールにCSS適用）
-  - `~/.local/bin/waybar-main-monitor`, `~/.local/bin/waybar-lid-suspend`
+  - `~/.local/bin/waybar-main-monitor`, `~/.local/bin/waybar-lid-suspend`, `~/.local/bin/waybar-keyboard-clean`
 - systemd (user)
   - `~/.config/systemd/user/lid-nosuspend.service`（lid close の suspend を inhibit するトグル用）
   - `~/.config/systemd/user/app-org.fcitx.Fcitx5@autostart.service.d/override.conf`（`cskk-git` 利用時に `fcitx5-cskk` が `libcskk` を見つけられるようにする）
 - スクリプト
   - `~/.local/bin/hypr-ws`（main/park 概念でワークスペース移動）
   - `~/.local/bin/hypr-monitor-position`（外部モニター位置を設定: left/right/up/down）
-  - `~/.local/bin/hypr-*-adjust` / `hypr-*-toggle`（opacity/blur/gaps/scale/refresh/main-monitor/internal-display/lid）
+  - `~/.local/bin/hypr-*-adjust` / `hypr-*-toggle`（opacity/blur/gaps/scale/refresh/main-monitor/internal-display/lid/keyboard-clean）
 
 補足:
 

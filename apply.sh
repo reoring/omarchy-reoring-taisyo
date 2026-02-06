@@ -100,8 +100,10 @@ preflight() {
     .local/bin/hypr-main-monitor-toggle \
     .local/bin/hypr-internal-display-toggle \
     .local/bin/hypr-lid-suspend-toggle \
+    .local/bin/hypr-keyboard-clean-toggle \
     .local/bin/waybar-main-monitor \
     .local/bin/waybar-lid-suspend \
+    .local/bin/waybar-keyboard-clean \
     .local/bin/waybar-wwan \
     .local/bin/wwan-menu \
     .local/bin/waybar-tailscale \
@@ -389,6 +391,7 @@ install_file "$SRC_HOME/.local/bin/hypr-main-monitor-toggle" "$HOME/.local/bin/h
 install_file "$SRC_HOME/.local/bin/hypr-monitor-position" "$HOME/.local/bin/hypr-monitor-position" 0755
 install_file "$SRC_HOME/.local/bin/hypr-internal-display-toggle" "$HOME/.local/bin/hypr-internal-display-toggle" 0755
 install_file "$SRC_HOME/.local/bin/hypr-lid-suspend-toggle" "$HOME/.local/bin/hypr-lid-suspend-toggle" 0755
+install_file "$SRC_HOME/.local/bin/hypr-keyboard-clean-toggle" "$HOME/.local/bin/hypr-keyboard-clean-toggle" 0755
 
 # systemd user service for lid toggle
 install_file "$SRC_HOME/.config/systemd/user/lid-nosuspend.service" "$HOME/.config/systemd/user/lid-nosuspend.service" 0644
@@ -411,6 +414,7 @@ if (( NO_WAYBAR )); then
 else
   install_file "$SRC_HOME/.local/bin/waybar-main-monitor" "$HOME/.local/bin/waybar-main-monitor" 0755
   install_file "$SRC_HOME/.local/bin/waybar-lid-suspend" "$HOME/.local/bin/waybar-lid-suspend" 0755
+  install_file "$SRC_HOME/.local/bin/waybar-keyboard-clean" "$HOME/.local/bin/waybar-keyboard-clean" 0755
   install_file "$SRC_HOME/.local/bin/waybar-wwan" "$HOME/.local/bin/waybar-wwan" 0755
   install_file "$SRC_HOME/.local/bin/wwan-menu" "$HOME/.local/bin/wwan-menu" 0755
   install_file "$SRC_HOME/.local/bin/waybar-tailscale" "$HOME/.local/bin/waybar-tailscale" 0755

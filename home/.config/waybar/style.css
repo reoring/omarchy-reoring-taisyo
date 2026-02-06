@@ -37,6 +37,7 @@
 #custom-screenrecording-indicator,
 #custom-main-monitor,
 #custom-lid,
+#custom-keyboard-clean,
 #custom-update {
   min-width: 12px;
   margin: 0 7.5px;
@@ -113,5 +114,9 @@ tooltip {
 }
 
 #custom-voxtype.recording {
+  color: #a55555;
+}
+
+#custom-keyboard-clean.active {
   color: #a55555;
 }

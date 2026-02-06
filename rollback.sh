@@ -129,11 +129,13 @@ dests=(
   "$HOME/.local/bin/hypr-monitor-position"
   "$HOME/.local/bin/hypr-internal-display-toggle"
   "$HOME/.local/bin/hypr-lid-suspend-toggle"
+  "$HOME/.local/bin/hypr-keyboard-clean-toggle"
 
   "$HOME/.config/systemd/user/lid-nosuspend.service"
 
   "$HOME/.local/bin/waybar-main-monitor"
   "$HOME/.local/bin/waybar-lid-suspend"
+  "$HOME/.local/bin/waybar-keyboard-clean"
   "$HOME/.config/waybar/config.jsonc"
   "$HOME/.config/waybar/style.css"
 )

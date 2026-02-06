@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+STATE_FILE="${XDG_CACHE_HOME:-$HOME/.cache}/hypr-keyboard-clean-mode"
+mode="off"
+
+if [[ -f "$STATE_FILE" ]]; then
+  current="$(sed -n '1p' "$STATE_FILE" 2>/dev/null || true)"
+  if [[ "$current" == "on" ]]; then
+    mode="on"
+  fi
+fi
+
+if [[ "$mode" == "on" ]]; then
+  echo '{"text":"","tooltip":"Keyboard cleaning: ON\nClick: re-enable keyboards\nRight click: force OFF","class":"active"}'
+else
+  echo '{"text":"","tooltip":"Keyboard cleaning: OFF\nClick: disable keyboards for cleaning","class":"inactive"}'
+fi

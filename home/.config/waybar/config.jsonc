@@ -16,6 +16,7 @@
     "cpu",
     "custom/main-monitor",
     "custom/lid",
+    "custom/keyboard-clean",
     "battery"
   ],
   "hyprland/workspaces": {
@@ -76,6 +77,14 @@
     "exec": "$HOME/.local/bin/waybar-lid-suspend",
     "on-click": "$HOME/.local/bin/hypr-lid-suspend-toggle",
     "signal": 9,
+    "interval": 3600,
+    "return-type": "json"
+  },
+  "custom/keyboard-clean": {
+    "exec": "$HOME/.local/bin/waybar-keyboard-clean",
+    "on-click": "$HOME/.local/bin/hypr-keyboard-clean-toggle toggle",
+    "on-click-right": "$HOME/.local/bin/hypr-keyboard-clean-toggle off",
+    "signal": 13,
     "interval": 3600,
     "return-type": "json"
   },

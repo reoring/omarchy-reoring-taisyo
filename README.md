@@ -17,7 +17,7 @@ Highlights:
 
 - AltGr workspace workflow with a "main monitor" concept + parking workspaces for the other display
 - Vim-style focus movement (`Super+H/J/K/L`) and small `hypr-*` adjust/toggle scripts (opacity/blur/gaps/scale/refresh/nightlight, etc.)
-- Waybar custom modules for "main monitor" (toggle + external position menu) and lid-close suspend state (clickable toggles)
+- Waybar custom modules for "main monitor" (toggle + external position menu), lid-close suspend, and keyboard cleaning mode (all clickable toggles)
 - Hardware-aware installs:
   - `monitors.conf` is installed only when `DP-4` is detected (or `--force-monitors`)
   - `envs.conf` is installed only when NVIDIA is detected (or `--force-nvidia-env`) and `apply.sh` ensures `~/.config/hypr/hyprland.conf` sources it
@@ -35,16 +35,16 @@ Highlights:
   - `~/.config/hypr/monitors.conf` (adds a DP-4 entry; auto-detected unless forced)
   - `~/.config/hypr/envs.conf` (NVIDIA env vars; auto-detected unless forced)
 - Waybar
-  - `~/.config/waybar/config.jsonc` (adds custom modules: main monitor / lid)
+  - `~/.config/waybar/config.jsonc` (adds custom modules: main monitor / lid / keyboard cleaning)
   - `~/.config/waybar/style.css` (CSS for the above)
-  - `~/.local/bin/waybar-main-monitor`, `~/.local/bin/waybar-lid-suspend`
+  - `~/.local/bin/waybar-main-monitor`, `~/.local/bin/waybar-lid-suspend`, `~/.local/bin/waybar-keyboard-clean`
 - systemd (user)
   - `~/.config/systemd/user/lid-nosuspend.service` (toggle-style inhibitor for lid-close suspend)
   - `~/.config/systemd/user/app-org.fcitx.Fcitx5@autostart.service.d/override.conf` (fix: make `fcitx5-cskk` find `libcskk` when using `cskk-git`)
 - Scripts
   - `~/.local/bin/hypr-ws` (main/park workspace routing)
   - `~/.local/bin/hypr-monitor-position` (set external monitor position: left/right/up/down)
-  - `~/.local/bin/hypr-*-adjust` / `hypr-*-toggle` (opacity/blur/gaps/scale/refresh/main-monitor/internal-display/lid)
+  - `~/.local/bin/hypr-*-adjust` / `hypr-*-toggle` (opacity/blur/gaps/scale/refresh/main-monitor/internal-display/lid/keyboard-clean)
 
 Notes:
 
