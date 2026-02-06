@@ -101,7 +101,9 @@ preflight() {
     .local/bin/hypr-internal-display-toggle \
     .local/bin/hypr-lid-suspend-toggle \
     .local/bin/waybar-main-monitor \
-    .local/bin/waybar-lid-suspend
+    .local/bin/waybar-lid-suspend \
+    .local/bin/waybar-wwan \
+    .local/bin/wwan-menu
   do
     if [[ -f "$SRC_HOME/$f" ]]; then
       log "ok: $f"
@@ -122,7 +124,7 @@ preflight() {
     fi
   done
 
-  for c in python python3 jq hyprctl systemctl notify-send omarchy-restart-waybar yay; do
+  for c in python python3 jq hyprctl systemctl notify-send omarchy-restart-waybar nmcli mmcli walker fzf yay; do
     if command -v "$c" >/dev/null 2>&1; then
       log "cmd: $c"
     else
@@ -406,6 +408,8 @@ if (( NO_WAYBAR )); then
 else
   install_file "$SRC_HOME/.local/bin/waybar-main-monitor" "$HOME/.local/bin/waybar-main-monitor" 0755
   install_file "$SRC_HOME/.local/bin/waybar-lid-suspend" "$HOME/.local/bin/waybar-lid-suspend" 0755
+  install_file "$SRC_HOME/.local/bin/waybar-wwan" "$HOME/.local/bin/waybar-wwan" 0755
+  install_file "$SRC_HOME/.local/bin/wwan-menu" "$HOME/.local/bin/wwan-menu" 0755
   install_file "$SRC_HOME/.config/waybar/config.jsonc" "$HOME/.config/waybar/config.jsonc" 0644
   install_file "$SRC_HOME/.config/waybar/style.css" "$HOME/.config/waybar/style.css" 0644
 

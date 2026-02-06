@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+WAYBAR_SIGNAL="${WAYBAR_WWAN_SIGNAL:-11}"
+
+nm_unescape() {
+  local v="${1//\\:/:}"
+  v="${v//\\\\/\\}"
+  printf '%s' "$v"
+}
+
+notify() {
+  local title="$1"
+  local body="$2"
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send "$title" "$body" -t 2000 >/dev/null 2>&1 || true
+  fi
+}
+
+refresh_waybar() {
+  pkill -RTMIN+"$WAYBAR_SIGNAL" waybar >/dev/null 2>&1 || true
+}
+
+first_gsm_device() {
+  nmcli -t -f DEVICE,TYPE device status 2>/dev/null \
+    | awk -F: '$2=="gsm"{print $1; exit}'
+}
+
+first_gsm_profile() {
+  local name=""
+  name=$(nmcli -t -f NAME,TYPE connection show 2>/dev/null \
+    | awk -F: '$2=="gsm"{print $1; exit}' || true)
+  nm_unescape "$name"
+}
+
+gsm_state_for_device() {
+  local dev="$1"
+  nmcli -t -f DEVICE,STATE device status 2>/dev/null \
+    | awk -F: -v d="$dev" '$1==d{print $2; exit}'
+}
+
+active_gsm_connection() {
+  local dev="$1"
+  local name=""
+
+  name=$(nmcli -t -f NAME,TYPE,DEVICE connection show --active 2>/dev/null \
+    | awk -F: -v d="$dev" '$2=="gsm" && $3==d{print $1; exit}' || true)
+
+  if [[ -z "$name" ]]; then
+    name=$(nmcli -t -f GENERAL.CONNECTION device show "$dev" 2>/dev/null \
+      | sed -n 's/^GENERAL\.CONNECTION://p' \
+      | head -n1 || true)
+  fi
+
+  name="$(nm_unescape "$name")"
+  if [[ "$name" == "--" ]]; then
+    name=""
+  fi
+  printf '%s' "$name"
+}
+
+print_details() {
+  local details=""
+  details="$("$HOME/.local/bin/waybar-wwan" 2>/dev/null | jq -r '.tooltip // empty' 2>/dev/null || true)"
+
+  if [[ -n "$details" ]]; then
+    notify "WWAN" "$details"
+  else
+    notify "WWAN" "No details available"
+  fi
+}
+
+device=""
+profile=""
+state=""
+active_conn=""
+connected=0
+
+read_state() {
+  device="$(first_gsm_device || true)"
+  profile="$(first_gsm_profile || true)"
+  state=""
+  active_conn=""
+  connected=0
+
+  if [[ -n "$device" ]]; then
+    state="$(gsm_state_for_device "$device" || true)"
+    active_conn="$(active_gsm_connection "$device" || true)"
+  fi
+
+  if [[ "$state" == "connected" || -n "$active_conn" ]]; then
+    connected=1
+  fi
+}
+
+connect_wwan() {
+  local target="${profile:-}"
+  local out=""
+
+  if [[ -z "$target" ]]; then
+    notify "WWAN" "No GSM profile found"
+    return 1
+  fi
+
+  if [[ -n "$device" ]]; then
+    if out=$(nmcli con up id "$target" ifname "$device" 2>&1); then
+      notify "WWAN" "Connected: $target"
+      refresh_waybar
+      return 0
+    fi
+  else
+    if out=$(nmcli con up id "$target" 2>&1); then
+      notify "WWAN" "Connected: $target"
+      refresh_waybar
+      return 0
+    fi
+  fi
+
+  notify "WWAN" "Connect failed: ${out:-unknown error}"
+  refresh_waybar
+  return 1
+}
+
+disconnect_wwan() {
+  local out=""
+  local target="${active_conn:-}"
+
+  if [[ -n "$target" ]]; then
+    if out=$(nmcli con down id "$target" 2>&1); then
+      notify "WWAN" "Disconnected: $target"
+      refresh_waybar
+      return 0
+    fi
+  elif [[ -n "$device" ]]; then
+    if out=$(nmcli dev disconnect "$device" 2>&1); then
+      notify "WWAN" "Disconnected: $device"
+      refresh_waybar
+      return 0
+    fi
+  else
+    notify "WWAN" "No WWAN device/connection found"
+    return 1
+  fi
+
+  notify "WWAN" "Disconnect failed: ${out:-unknown error}"
+  refresh_waybar
+  return 1
+}
+
+pick_action() {
+  local placeholder="WWAN"
+  local choice=""
+  local -a actions=()
+
+  if (( connected )); then
+    placeholder="WWAN (connected)"
+    actions+=("Disconnect")
+  else
+    placeholder="WWAN (disconnected)"
+    if [[ -n "$profile" ]]; then
+      actions+=("Connect")
+    fi
+  fi
+  actions+=("Details")
+
+  if command -v walker >/dev/null 2>&1; then
+    choice=$(printf '%s\n' "${actions[@]}" | walker --dmenu --placeholder "$placeholder" 2>/dev/null || true)
+  elif command -v fzf >/dev/null 2>&1; then
+    choice=$(printf '%s\n' "${actions[@]}" | fzf --prompt='WWAN> ' --height=40% --layout=reverse 2>/dev/null || true)
+  else
+    if (( connected )); then
+      disconnect_wwan
+    else
+      connect_wwan
+    fi
+    return 0
+  fi
+
+  case "$choice" in
+    Connect)
+      connect_wwan
+      ;;
+    Disconnect)
+      disconnect_wwan
+      ;;
+    Details)
+      print_details
+      ;;
+    *)
+      ;;
+  esac
+}
+
+if ! command -v nmcli >/dev/null 2>&1; then
+  notify "WWAN" "nmcli not found"
+  exit 1
+fi
+
+read_state
+pick_action

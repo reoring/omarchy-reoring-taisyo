@@ -54,6 +54,28 @@
   margin-right: 13px;
 }
 
+#custom-tailscale {
+  min-width: 12px;
+  margin: 0 7.5px;
+}
+
+#custom-tailscale.disconnected,
+#custom-tailscale.needs-login,
+#custom-tailscale.unknown {
+  opacity: 0.4;
+}
+
+#custom-wwan {
+  min-width: 12px;
+  margin-right: 13px;
+}
+
+#custom-wwan.disconnected,
+#custom-wwan.absent,
+#custom-wwan.unavailable {
+  opacity: 0.55;
+}
+
 #custom-expand-icon {
   margin-right: 18px;
 }

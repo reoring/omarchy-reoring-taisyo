@@ -8,7 +8,9 @@
   "modules-center": ["clock", "custom/update", "custom/voxtype", "custom/screenrecording-indicator"],
   "modules-right": [
     "group/tray-expander",
+    "custom/tailscale",
     "bluetooth",
+    "custom/wwan",
     "network",
     "pulseaudio",
     "cpu",
@@ -96,6 +98,13 @@
     "spacing": 1,
     "on-click": "omarchy-launch-wifi"
   },
+  "custom/wwan": {
+    "exec": "$HOME/.local/bin/waybar-wwan",
+    "return-type": "json",
+    "interval": 10,
+    "signal": 11,
+    "on-click": "$HOME/.local/bin/wwan-menu"
+  },
   "battery": {
     "format": "{capacity}% {icon}",
     "format-discharging": "{icon}",
@@ -170,6 +179,14 @@
     "tooltip": true,
     "on-click-right": "omarchy-voxtype-config",
     "on-click": "omarchy-voxtype-model"
+  },
+  "custom/tailscale": {
+    "exec": "$HOME/.local/bin/waybar-tailscale",
+    "on-click": "$HOME/.local/bin/waybar-tailscale-toggle",
+    "on-click-right": "$HOME/.local/bin/waybar-tailscale-peers",
+    "signal": 12,
+    "interval": 30,
+    "return-type": "json"
   },
   "tray": {
     "icon-size": 12,

@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ICON=""
+
+nm_unescape() {
+  local v="${1//\\:/:}"
+  v="${v//\\\\/\\}"
+  printf '%s' "$v"
+}
+
+first_gsm_device() {
+  nmcli -t -f DEVICE,TYPE device status 2>/dev/null \
+    | awk -F: '$2=="gsm"{print $1; exit}'
+}
+
+first_gsm_profile() {
+  local name=""
+  name=$(nmcli -t -f NAME,TYPE connection show 2>/dev/null \
+    | awk -F: '$2=="gsm"{print $1; exit}' || true)
+  nm_unescape "$name"
+}
+
+gsm_state_for_device() {
+  local dev="$1"
+  nmcli -t -f DEVICE,STATE device status 2>/dev/null \
+    | awk -F: -v d="$dev" '$1==d{print $2; exit}'
+}
+
+active_gsm_connection() {
+  local dev="$1"
+  local name=""
+
+  name=$(nmcli -t -f NAME,TYPE,DEVICE connection show --active 2>/dev/null \
+    | awk -F: -v d="$dev" '$2=="gsm" && $3==d{print $1; exit}' || true)
+
+  if [[ -z "$name" ]]; then
+    name=$(nmcli -t -f GENERAL.CONNECTION device show "$dev" 2>/dev/null \
+      | sed -n 's/^GENERAL\.CONNECTION://p' \
+      | head -n1 || true)
+  fi
+
+  name="$(nm_unescape "$name")"
+  if [[ "$name" == "--" ]]; then
+    name=""
+  fi
+  printf '%s' "$name"
+}
+
+ip4_for_device() {
+  local dev="$1"
+  nmcli -t -f IP4.ADDRESS device show "$dev" 2>/dev/null \
+    | sed -n 's/^IP4\.ADDRESS\[[0-9]\+\]://p' \
+    | head -n1
+}
+
+normalize_access() {
+  local raw="${1,,}"
+  case "$raw" in
+    *5g*|*nr5g*|*5gnr*|*nr*)
+      printf '5G'
+      ;;
+    *lte*)
+      printf 'LTE'
+      ;;
+    *hspa*|*hsupa*|*hsdpa*)
+      printf 'HSPA'
+      ;;
+    *umts*)
+      printf 'UMTS'
+      ;;
+    *edge*)
+      printf 'EDGE'
+      ;;
+    *gprs*)
+      printf 'GPRS'
+      ;;
+    *)
+      printf ''
+      ;;
+  esac
+}
+
+mm_info_for_device() {
+  local dev="$1"
+  local modem_path kv primary ports signal access
+
+  command -v mmcli >/dev/null 2>&1 || return 0
+
+  while IFS= read -r modem_path; do
+    [[ -n "$modem_path" ]] || continue
+    kv=$(mmcli -m "$modem_path" -K 2>/dev/null || true)
+    [[ -n "$kv" ]] || continue
+
+    primary=$(printf '%s\n' "$kv" | sed -n 's/^modem\.generic\.primary-port=//p' | head -n1)
+    ports=$(printf '%s\n' "$kv" | sed -n 's/^modem\.generic\.ports=//p' | head -n1)
+
+    if [[ "$primary" == "$dev" || "$ports" == *"$dev"* ]]; then
+      signal=$(printf '%s\n' "$kv" | sed -n 's/^modem\.generic\.signal-quality\.value=//p' | head -n1)
+      access=$(printf '%s\n' "$kv" | sed -n 's/^modem\.3gpp\.access-technologies=//p' | head -n1)
+      access="$(normalize_access "$access")"
+      printf '%s|%s' "$access" "$signal"
+      return 0
+    fi
+  done < <(mmcli -L 2>/dev/null | awk '$1 ~ /^\/org\/freedesktop\/ModemManager1\/Modem\/[0-9]+$/ {print $1}')
+}
+
+if ! command -v nmcli >/dev/null 2>&1; then
+  jq -nc \
+    --arg text "$ICON" \
+    --arg tooltip "WWAN: nmcli not found" \
+    --arg class "unavailable" \
+    '{text: $text, tooltip: $tooltip, class: $class}'
+  exit 0
+fi
+
+device="$(first_gsm_device || true)"
+profile="$(first_gsm_profile || true)"
+state=""
+connection=""
+ip4=""
+
+if [[ -n "$device" ]]; then
+  state="$(gsm_state_for_device "$device" || true)"
+  connection="$(active_gsm_connection "$device" || true)"
+  ip4="$(ip4_for_device "$device" || true)"
+fi
+
+if [[ "$connection" == "" && "$state" != "connected" ]]; then
+  connection="$profile"
+fi
+
+mm_info=""
+access=""
+signal=""
+if [[ -n "$device" ]]; then
+  mm_info="$(mm_info_for_device "$device" || true)"
+fi
+if [[ "$mm_info" == *"|"* ]]; then
+  access="${mm_info%%|*}"
+  signal="${mm_info#*|}"
+fi
+
+class="disconnected"
+status="Disconnected"
+
+if [[ -z "$device" && -z "$profile" ]]; then
+  class="absent"
+  status="No modem detected"
+elif [[ "$state" == "connected" ]]; then
+  class="connected"
+  status="Connected"
+fi
+
+tooltip="WWAN: $status"
+if [[ -n "$connection" ]]; then
+  tooltip+=$'\n'"Connection: $connection"
+fi
+if [[ -n "$profile" && "$profile" != "$connection" ]]; then
+  tooltip+=$'\n'"Profile: $profile"
+fi
+if [[ -n "$device" ]]; then
+  tooltip+=$'\n'"Device: $device"
+fi
+if [[ -n "$ip4" ]]; then
+  tooltip+=$'\n'"IP: $ip4"
+fi
+if [[ -n "$access" ]]; then
+  tooltip+=$'\n'"Access: $access"
+fi
+if [[ -n "$signal" ]]; then
+  tooltip+=$'\n'"Signal: ${signal}%"
+fi
+tooltip+=$'\n\n'"Left click: WWAN menu"
+
+jq -nc \
+  --arg text "$ICON" \
+  --arg tooltip "$tooltip" \
+  --arg class "$class" \
+  '{text: $text, tooltip: $tooltip, class: $class}'
