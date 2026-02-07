@@ -87,6 +87,7 @@ preflight() {
     .config/hypr/input.conf \
     .config/hypr/monitors.conf \
     .config/hypr/envs.conf \
+    .config/hypr/opacity.conf \
     .config/systemd/user/lid-nosuspend.service \
     .config/waybar/config.jsonc \
     .config/waybar/style.css \
@@ -373,6 +374,11 @@ fi
 install_file "$SRC_HOME/.config/hypr/bindings.conf" "$HOME/.config/hypr/bindings.conf" 0644
 install_file "$SRC_HOME/.config/hypr/hypridle.conf" "$HOME/.config/hypr/hypridle.conf" 0644
 install_file "$SRC_HOME/.config/hypr/input.conf" "$HOME/.config/hypr/input.conf" 0644
+install_file "$SRC_HOME/.config/hypr/opacity.conf" "$HOME/.config/hypr/opacity.conf" 0644
+
+ensure_source_line "$HOME/.config/hypr/hyprland.conf" \
+  'source = ~/.config/hypr/opacity.conf' \
+  '^source\s*=\s*~/.config/hypr/looknfeel\.conf\s*$'
 
 # Optional monitors.conf (machine-specific)
 if (( FORCE_MONITORS )); then
