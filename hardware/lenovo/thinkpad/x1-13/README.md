@@ -123,6 +123,40 @@ bash hardware/lenovo/thinkpad/x1-13/setup-wwan-docomo.sh enable --wait 60 --dire
 
 If the modem is not detected after install, reboot once (firmware load).
 
+## Wi-Fi Tethering (AP) from WWAN
+
+This setup uses iwd + systemd-networkd for Wi-Fi. NetworkManager is configured to
+ignore `wl*` (WWAN-only), so use the iwd AP feature and let systemd-networkd serve
+DHCP + NAT.
+
+If ufw is enabled (default input/forward DROP), you must also allow DHCP + routing.
+The script does this automatically on start/stop.
+
+Install the AP network config:
+
+```sh
+bash hardware/lenovo/thinkpad/x1-13/setup-wifi-ap-from-wwan.sh install
+```
+
+Start/stop:
+
+```sh
+bash hardware/lenovo/thinkpad/x1-13/setup-wifi-ap-from-wwan.sh start --ssid TPX1-WWAN --pass 'change-this-pass'
+bash hardware/lenovo/thinkpad/x1-13/setup-wifi-ap-from-wwan.sh stop
+```
+
+If you want to manage firewall rules yourself:
+
+```sh
+bash hardware/lenovo/thinkpad/x1-13/setup-wifi-ap-from-wwan.sh start --no-ufw ...
+```
+
+Status:
+
+```sh
+bash hardware/lenovo/thinkpad/x1-13/setup-wifi-ap-from-wwan.sh status
+```
+
 ## Uninstall
 
 ```sh
