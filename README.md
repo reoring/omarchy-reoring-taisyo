@@ -50,6 +50,8 @@ Highlights:
 
 Notes:
 
+- Fcitx EN group toggle is bound to `Super+Ctrl+J` and is also available as a Waybar `JP/EN` module.
+- `apply.sh` temporarily stops fcitx5 while installing `~/.config/fcitx5/*` to avoid fcitx autosave overwriting updated config.
 - When installing NVIDIA envs, `apply.sh` may edit `~/.config/hypr/hyprland.conf` to add `source = ~/.config/hypr/envs.conf`.
 - Some keybindings are personal (Spotify/Signal/1Password/web apps). Adjust in `~/.config/hypr/bindings.conf` (see the shortcut guide).
 - If your external monitor name is not `DP-4`, update `home/.config/hypr/monitors.conf` (and apply with `--force-monitors`).
@@ -57,6 +59,12 @@ Notes:
 ## Usage
 
 From this repo directory:
+
+Optional (DDC brightness setup: `i2c-dev` + udev rules):
+
+```sh
+bash ./setup-ddcutil.sh
+```
 
 ```sh
 bash ./apply.sh
@@ -88,7 +96,7 @@ Options:
 - Omarchy + Hyprland setup (these files/scripts call Omarchy helpers like `omarchy-launch-*`)
 - Tools commonly available on Omarchy systems: `bash`, `install`, `python` (3.x), `hyprctl`, `jq`, `systemctl --user`, `notify-send`, `walker` (or `fzf`)
 - `yay` (used by default to install fcitx5-related packages; skip with `--skip-packages`)
-- Optional: `ddcutil` (needed for `~/.local/bin/ddc-brightness`)
+- Optional (DDC brightness): `ddcutil` (installed by default via `apply.sh` unless `--skip-packages`; `setup-ddcutil.sh` also installs udev rules)
 - Waybar (only if you install Waybar config)
 
 ## Customize

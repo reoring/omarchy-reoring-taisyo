@@ -48,6 +48,8 @@ Omarchy (Hyprland) の標準設定に、reoring のカスタム設定/スクリ�
 
 補足:
 
+- fcitx ENグループ切替はデフォルトで `Super+Ctrl+J` に割り当て、Waybar の `JP/EN` モジュールからも切り替えできます。
+- `apply.sh` は `~/.config/fcitx5/*` のインストール中に fcitx5 を一時停止し、終了時の autosave による設定上書きを避けます。
 - NVIDIA env を適用する場合、`apply.sh` は `~/.config/hypr/hyprland.conf` に `source = ~/.config/hypr/envs.conf` を挿入/追記することがあります。
 - キーバインドは個人設定寄りです（Spotify/Signal/1Password/Web アプリなど）。必要に応じて `~/.config/hypr/bindings.conf` を編集してください（ショートカットガイド参照）。
 - 外部モニター名が `DP-4` でない場合は `home/.config/hypr/monitors.conf` を調整し、`--force-monitors` で適用してください。
@@ -55,6 +57,12 @@ Omarchy (Hyprland) の標準設定に、reoring のカスタム設定/スクリ�
 ## 使い方
 
 このディレクトリで:
+
+任意（DDC 輝度を使う場合のセットアップ: `i2c-dev` + udev rules）:
+
+```sh
+bash ./setup-ddcutil.sh
+```
 
 ```sh
 bash ./apply.sh
@@ -86,7 +94,7 @@ bash ./apply.sh --check
 - Omarchy + Hyprland 環境（`omarchy-launch-*` など Omarchy の helper を呼びます）
 - よく使うコマンド: `bash`, `install`, `python`（3系）, `hyprctl`, `jq`, `systemctl --user`, `notify-send`, `walker`（または `fzf`）
 - `yay`（デフォルトで fcitx5 関連パッケージをインストールします。不要なら `--skip-packages`）
-- 任意: `ddcutil`（`~/.local/bin/ddc-brightness` で使用）
+- 任意（DDC 輝度）: `ddcutil`（`apply.sh` が通常は導入します。不要なら `--skip-packages`。`setup-ddcutil.sh` は udev rules もセットアップ）
 - Waybar（Waybar 関連を適用する場合）
 
 ## カスタマイズ
