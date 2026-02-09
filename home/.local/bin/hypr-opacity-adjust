@@ -5,6 +5,7 @@ STEP=${STEP:-0.05}
 MIN=${MIN:-0.20}
 MAX=${MAX:-1.00}
 DEFAULT=${DEFAULT:-1.00}
+TAG_PREFIX=${TAG_PREFIX:-alpha_}
 
 usage() {
   echo "Usage: $(basename "$0") up|down" >&2
@@ -16,20 +17,32 @@ case "$direction" in
   *) usage; exit 2 ;;
 esac
 
-addr=$(hyprctl activewindow -j | jq -r '.address')
+active_json=$(hyprctl activewindow -j)
+addr=$(jq -r '.address' <<<"$active_json")
 if [[ -z "$addr" || "$addr" == "null" ]]; then
   exit 0
 fi
 
-current=$(hyprctl getprop "address:$addr" opacity 2>/dev/null | head -n1 || true)
+current_tag=$(jq -r '.tags[]? | select(startswith("'"$TAG_PREFIX"'"))' <<<"$active_json" | head -n1 || true)
+current_tag=${current_tag%\*}
+
+current=""
+if [[ -n "$current_tag" ]]; then
+  current=${current_tag#"$TAG_PREFIX"}
+fi
+
+if [[ -z "$current" ]]; then
+  current=$(hyprctl getprop "address:$addr" opacity 2>/dev/null | head -n1 || true)
+fi
 if [[ -z "$current" ]]; then
   current=$DEFAULT
 fi
 
-next=$(
+next=$( 
   DIR="$direction" STEP="$STEP" MIN="$MIN" MAX="$MAX" CUR="$current" \
   python - <<'PY'
 import os
+import math
 
 direction = os.environ['DIR']
 step = float(os.environ['STEP'])
@@ -37,18 +50,46 @@ minv = float(os.environ['MIN'])
 maxv = float(os.environ['MAX'])
 cur = float(os.environ['CUR'])
 
-nxt = cur + step if direction == 'up' else cur - step
+eps = 1e-9
+q = cur / step
+nearest_i = int(round(q))
+on_grid = abs(q - nearest_i) < eps
+
+if direction == 'down':
+  if on_grid:
+    nxt = (nearest_i - 1) * step
+  else:
+    nxt = math.floor(q) * step
+else:
+  if on_grid:
+    nxt = (nearest_i + 1) * step
+  else:
+    nxt = math.ceil(q) * step
+
 nxt = max(minv, min(maxv, nxt))
 print(f"{nxt:.2f}")
 PY
 )
 
-# Ensure opacity takes effect
-if [[ "$next" != "1.00" ]]; then
-  hyprctl dispatch setprop "address:$addr" opaque off >/dev/null
-else
-  hyprctl dispatch setprop "address:$addr" opaque on >/dev/null
-fi
+next_tag="${TAG_PREFIX}${next}"
 
-hyprctl dispatch setprop "address:$addr" opacity "$next" >/dev/null
+# Remove any existing alpha_* tags from the active window.
+while IFS= read -r t; do
+  [[ -z "$t" ]] && continue
+  t=${t%\*}
+  if [[ "$t" == ${TAG_PREFIX}* ]]; then
+    hyprctl dispatch tagwindow -- "-$t" >/dev/null 2>&1 || true
+  fi
+done < <(jq -r '.tags[]?' <<<"$active_json")
+
+# Apply tag so windowrules can persist the chosen opacity across reloads.
+hyprctl dispatch tagwindow "+$next_tag" >/dev/null 2>&1 || true
+
+# Keep the old behavior too (immediate effect even without opacity.conf sourced).
+if [[ "$next" != "1.00" ]]; then
+  hyprctl dispatch setprop "address:$addr" opaque off >/dev/null 2>&1 || true
+else
+  hyprctl dispatch setprop "address:$addr" opaque on >/dev/null 2>&1 || true
+fi
+hyprctl dispatch setprop "address:$addr" opacity "$next" >/dev/null 2>&1 || true
 notify-send "Window opacity" "$next" -t 1200

@@ -98,6 +98,10 @@ Add `Shift` to the workspace keys:
 | `Super+Ctrl+P` | Toggle internal display (safe: won't disable your only monitor) |
 | `Super+Ctrl+O` | Toggle lid-close suspend (systemd user service) |
 
+Notes:
+
+- Opacity adjustment (`Super+Alt+-` / `Super+Alt+=`) uses window tags + `~/.config/hypr/opacity.conf` rules so it stays stable across window title changes and `hyprctl reload`.
+
 ## Where to change things
 
 - Keybindings live in `~/.config/hypr/bindings.conf`.
