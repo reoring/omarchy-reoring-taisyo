@@ -10,6 +10,7 @@ Docs:
 
 - Japanese README: `README.ja.md`
 - Hyprland shortcut guide: `docs/user-guide.md` (EN) / `user-guide.ja.md` (JA)
+- CSKK notes: `japanese/cskk.md`
 
 ## What you get
 
@@ -28,6 +29,8 @@ Highlights:
   - `~/.config/environment.d/90-fcitx5.conf`, `~/.config/environment.d/fcitx.conf` (IME env vars)
   - `~/.config/fcitx5/config`, `~/.config/fcitx5/profile` (hotkeys + default IM)
   - `~/.config/fcitx5/conf/*.conf` (small addon tweaks)
+  - `~/.config/fcitx5/conf/fcitx5-cskk` (CSKK config: use an ASCII passthrough rule)
+  - `~/.local/share/libcskk/rules/*` (CSKK rule generation: keep key events in `@`/Ascii)
 - Hyprland
   - `~/.config/hypr/bindings.conf` (AltGr workspace workflow, vim-style focus movement, adjustment keybinds)
   - `~/.config/hypr/hypridle.conf` (lock/DPMS timeout tweaks)

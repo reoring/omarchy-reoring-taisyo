@@ -82,6 +82,7 @@ preflight() {
     .config/fcitx5/conf/clipboard.conf \
     .config/fcitx5/conf/notifications.conf \
     .config/fcitx5/conf/xcb.conf \
+    .config/fcitx5/conf/fcitx5-cskk \
     .config/hypr/bindings.conf \
     .config/hypr/hypridle.conf \
     .config/hypr/input.conf \
@@ -314,6 +315,293 @@ PY
   log "updated: $file"
 }
 
+ensure_libcskk_metadata_has_passthrough() {
+  local metadata="$1"
+
+  if [[ ! -f "$metadata" ]]; then
+    log "note: missing libcskk metadata: $metadata"
+    return 0
+  fi
+
+  if grep -q '^\[passthrough_ascii\]' "$metadata"; then
+    log "ok: libcskk metadata has passthrough_ascii"
+    return 0
+  fi
+
+  backup_if_needed "$metadata"
+  if (( DRY_RUN )); then
+    log "[dry-run] append passthrough_ascii to: $metadata"
+    return 0
+  fi
+
+  python - "$metadata" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+text = path.read_text(encoding="utf-8", errors="replace")
+
+if "[passthrough_ascii]" in text:
+    raise SystemExit(0)
+
+block = """
+
+[passthrough_ascii]
+name = "Passthrough ASCII"
+description = "default rule with ASCII passthrough"
+path = "passthrough_ascii"
+"""
+
+if text and not text.endswith("\n"):
+    text += "\n"
+
+path.write_text(text + block.lstrip("\n"), encoding="utf-8")
+PY
+
+  log "updated: $metadata"
+}
+
+generate_libcskk_passthrough_ascii_rule() {
+  local src="$1"
+  local dest="$2"
+  local tmp="${dest}.tmp"
+
+  if [[ ! -f "$src" ]]; then
+    log "note: missing libcskk rule source: $src"
+    return 0
+  fi
+
+  if (( DRY_RUN )); then
+    log "[dry-run] generate libcskk passthrough rule: $dest"
+    return 0
+  fi
+
+  run mkdir -p "$(dirname "$dest")"
+
+  python - "$src" "$tmp" <<'PY'
+import sys
+
+src_path = sys.argv[1]
+out_path = sys.argv[2]
+
+with open(src_path, "r", encoding="utf-8", errors="replace") as f:
+    lines = f.readlines()
+
+def is_section_header(line: str) -> bool:
+    s = line.strip()
+    return s.startswith("[") and s.endswith("]")
+
+ascii_section = """[direct.ascii]
+\"C-g\" = [\"Abort\"]
+\"C-j\" = [\"ChangeInputMode(Hiragana)\"]
+
+# Pass most keys through so apps/games receive key events.
+\"Escape\" = [\"PassthroughKeyEvent\"]
+\"Tab\" = [\"PassthroughKeyEvent\"]
+\"Return\" = [\"PassthroughKeyEvent\"]
+\"C-m\" = [\"PassthroughKeyEvent\"]
+\"space\" = [\"PassthroughKeyEvent\"]
+\"BackSpace\" = [\"PassthroughKeyEvent\"]
+\"Delete\" = [\"PassthroughKeyEvent\"]
+\"Left\" = [\"PassthroughKeyEvent\"]
+\"Right\" = [\"PassthroughKeyEvent\"]
+\"Up\" = [\"PassthroughKeyEvent\"]
+\"Down\" = [\"PassthroughKeyEvent\"]
+\"Home\" = [\"PassthroughKeyEvent\"]
+\"End\" = [\"PassthroughKeyEvent\"]
+\"Page_Up\" = [\"PassthroughKeyEvent\"]
+\"Next\" = [\"PassthroughKeyEvent\"]
+
+\"0\" = [\"PassthroughKeyEvent\"]
+\"1\" = [\"PassthroughKeyEvent\"]
+\"2\" = [\"PassthroughKeyEvent\"]
+\"3\" = [\"PassthroughKeyEvent\"]
+\"4\" = [\"PassthroughKeyEvent\"]
+\"5\" = [\"PassthroughKeyEvent\"]
+\"6\" = [\"PassthroughKeyEvent\"]
+\"7\" = [\"PassthroughKeyEvent\"]
+\"8\" = [\"PassthroughKeyEvent\"]
+\"9\" = [\"PassthroughKeyEvent\"]
+
+\"a\" = [\"PassthroughKeyEvent\"]
+\"b\" = [\"PassthroughKeyEvent\"]
+\"c\" = [\"PassthroughKeyEvent\"]
+\"d\" = [\"PassthroughKeyEvent\"]
+\"e\" = [\"PassthroughKeyEvent\"]
+\"f\" = [\"PassthroughKeyEvent\"]
+\"g\" = [\"PassthroughKeyEvent\"]
+\"h\" = [\"PassthroughKeyEvent\"]
+\"i\" = [\"PassthroughKeyEvent\"]
+\"j\" = [\"PassthroughKeyEvent\"]
+\"k\" = [\"PassthroughKeyEvent\"]
+\"l\" = [\"PassthroughKeyEvent\"]
+\"m\" = [\"PassthroughKeyEvent\"]
+\"n\" = [\"PassthroughKeyEvent\"]
+\"o\" = [\"PassthroughKeyEvent\"]
+\"p\" = [\"PassthroughKeyEvent\"]
+\"q\" = [\"PassthroughKeyEvent\"]
+\"r\" = [\"PassthroughKeyEvent\"]
+\"s\" = [\"PassthroughKeyEvent\"]
+\"t\" = [\"PassthroughKeyEvent\"]
+\"u\" = [\"PassthroughKeyEvent\"]
+\"v\" = [\"PassthroughKeyEvent\"]
+\"w\" = [\"PassthroughKeyEvent\"]
+\"x\" = [\"PassthroughKeyEvent\"]
+\"y\" = [\"PassthroughKeyEvent\"]
+\"z\" = [\"PassthroughKeyEvent\"]
+
+\"A\" = [\"PassthroughKeyEvent\"]
+\"B\" = [\"PassthroughKeyEvent\"]
+\"C\" = [\"PassthroughKeyEvent\"]
+\"D\" = [\"PassthroughKeyEvent\"]
+\"E\" = [\"PassthroughKeyEvent\"]
+\"F\" = [\"PassthroughKeyEvent\"]
+\"G\" = [\"PassthroughKeyEvent\"]
+\"H\" = [\"PassthroughKeyEvent\"]
+\"I\" = [\"PassthroughKeyEvent\"]
+\"J\" = [\"PassthroughKeyEvent\"]
+\"K\" = [\"PassthroughKeyEvent\"]
+\"L\" = [\"PassthroughKeyEvent\"]
+\"M\" = [\"PassthroughKeyEvent\"]
+\"N\" = [\"PassthroughKeyEvent\"]
+\"O\" = [\"PassthroughKeyEvent\"]
+\"P\" = [\"PassthroughKeyEvent\"]
+\"Q\" = [\"PassthroughKeyEvent\"]
+\"R\" = [\"PassthroughKeyEvent\"]
+\"S\" = [\"PassthroughKeyEvent\"]
+\"T\" = [\"PassthroughKeyEvent\"]
+\"U\" = [\"PassthroughKeyEvent\"]
+\"V\" = [\"PassthroughKeyEvent\"]
+\"W\" = [\"PassthroughKeyEvent\"]
+\"X\" = [\"PassthroughKeyEvent\"]
+\"Y\" = [\"PassthroughKeyEvent\"]
+\"Z\" = [\"PassthroughKeyEvent\"]
+
+\"minus\" = [\"PassthroughKeyEvent\"]
+\"underscore\" = [\"PassthroughKeyEvent\"]
+\"equal\" = [\"PassthroughKeyEvent\"]
+\"plus\" = [\"PassthroughKeyEvent\"]
+\"bracketleft\" = [\"PassthroughKeyEvent\"]
+\"braceleft\" = [\"PassthroughKeyEvent\"]
+\"bracketright\" = [\"PassthroughKeyEvent\"]
+\"braceright\" = [\"PassthroughKeyEvent\"]
+\"backslash\" = [\"PassthroughKeyEvent\"]
+\"bar\" = [\"PassthroughKeyEvent\"]
+\"semicolon\" = [\"PassthroughKeyEvent\"]
+\"colon\" = [\"PassthroughKeyEvent\"]
+\"apostrophe\" = [\"PassthroughKeyEvent\"]
+\"quotedbl\" = [\"PassthroughKeyEvent\"]
+\"comma\" = [\"PassthroughKeyEvent\"]
+\"less\" = [\"PassthroughKeyEvent\"]
+\"period\" = [\"PassthroughKeyEvent\"]
+\"greater\" = [\"PassthroughKeyEvent\"]
+\"slash\" = [\"PassthroughKeyEvent\"]
+\"question\" = [\"PassthroughKeyEvent\"]
+\"grave\" = [\"PassthroughKeyEvent\"]
+\"asciitilde\" = [\"PassthroughKeyEvent\"]
+
+\"exclam\" = [\"PassthroughKeyEvent\"]
+\"at\" = [\"PassthroughKeyEvent\"]
+\"numbersign\" = [\"PassthroughKeyEvent\"]
+\"dollar\" = [\"PassthroughKeyEvent\"]
+\"percent\" = [\"PassthroughKeyEvent\"]
+\"asciicircum\" = [\"PassthroughKeyEvent\"]
+\"ampersand\" = [\"PassthroughKeyEvent\"]
+\"asterisk\" = [\"PassthroughKeyEvent\"]
+\"parenleft\" = [\"PassthroughKeyEvent\"]
+\"parenright\" = [\"PassthroughKeyEvent\"]
+"""
+
+out = []
+in_metadata = False
+in_ascii = False
+ascii_written = False
+
+for line in lines:
+    stripped = line.strip()
+
+    if stripped == "[direct.ascii]":
+        out.append(ascii_section)
+        in_ascii = True
+        ascii_written = True
+        continue
+
+    if in_ascii:
+        if is_section_header(line):
+            in_ascii = False
+        else:
+            continue
+
+    if stripped == "[metadata]":
+        in_metadata = True
+        out.append(line)
+        continue
+
+    if in_metadata and is_section_header(line):
+        in_metadata = False
+
+    if in_metadata:
+        if stripped.startswith("name ="):
+            out.append('name = "passthrough_ascii"\n')
+            continue
+        if stripped.startswith("description ="):
+            out.append('description = "default typing rule (ASCII passthrough)"\n')
+            continue
+
+    out.append(line)
+
+if not ascii_written:
+    raise SystemExit(f"ERROR: missing [direct.ascii] section in: {src_path}")
+
+with open(out_path, "w", encoding="utf-8") as f:
+    f.writelines(out)
+PY
+
+  install_file "$tmp" "$dest" 0644
+  run rm -f "$tmp"
+}
+
+setup_cskk_passthrough_ascii() {
+  local sys_rules="/usr/share/libcskk/rules"
+  local user_rules="$HOME/.local/share/libcskk/rules"
+  local sys_default_rule="$sys_rules/default/rule.toml"
+
+  if [[ ! -d "$sys_rules" ]]; then
+    log "note: libcskk system rules not found: $sys_rules"
+    return 0
+  fi
+
+  # libcskk prefers ~/.local/share/libcskk/rules when it exists. Ensure we have
+  # a complete baseline (metadata + default rules) so fcitx5-cskk can create a
+  # context reliably.
+  if [[ ! -f "$user_rules/metadata.toml" ]]; then
+    if [[ -f "$sys_rules/metadata.toml" ]]; then
+      install_file "$sys_rules/metadata.toml" "$user_rules/metadata.toml" 0644
+    else
+      log "note: missing libcskk metadata: $sys_rules/metadata.toml"
+      return 0
+    fi
+  fi
+
+  if [[ ! -f "$user_rules/default/rule.toml" ]]; then
+    if [[ -f "$sys_default_rule" ]]; then
+      install_file "$sys_default_rule" "$user_rules/default/rule.toml" 0644
+    else
+      log "note: missing libcskk default rule: $sys_default_rule"
+      return 0
+    fi
+  fi
+
+  if grep -q '^\[azik\]' "$user_rules/metadata.toml" 2>/dev/null; then
+    if [[ -f "$sys_rules/azik/rule.toml" && ! -f "$user_rules/azik/rule.toml" ]]; then
+      install_file "$sys_rules/azik/rule.toml" "$user_rules/azik/rule.toml" 0644
+    fi
+  fi
+
+  ensure_libcskk_metadata_has_passthrough "$user_rules/metadata.toml"
+  generate_libcskk_passthrough_ascii_rule "$sys_default_rule" "$user_rules/passthrough_ascii/rule.toml"
+}
+
 if (( CHECK_ONLY )); then
   preflight
   exit $?
@@ -349,6 +637,9 @@ install_file "$SRC_HOME/.config/fcitx5/profile" "$HOME/.config/fcitx5/profile" 0
 install_file "$SRC_HOME/.config/fcitx5/conf/notifications.conf" "$HOME/.config/fcitx5/conf/notifications.conf" 0644
 install_file "$SRC_HOME/.config/fcitx5/conf/xcb.conf" "$HOME/.config/fcitx5/conf/xcb.conf" 0644
 install_file "$SRC_HOME/.config/fcitx5/conf/clipboard.conf" "$HOME/.config/fcitx5/conf/clipboard.conf" 0644
+install_file "$SRC_HOME/.config/fcitx5/conf/fcitx5-cskk" "$HOME/.config/fcitx5/conf/fcitx5-cskk" 0644
+
+setup_cskk_passthrough_ascii
 
 apply_gtk_gsettings() {
   if ! command -v gsettings >/dev/null 2>&1; then

@@ -111,6 +111,11 @@ dests=(
   "$HOME/.config/fcitx5/conf/clipboard.conf"
   "$HOME/.config/fcitx5/conf/notifications.conf"
   "$HOME/.config/fcitx5/conf/xcb.conf"
+  "$HOME/.config/fcitx5/conf/fcitx5-cskk"
+  "$HOME/.local/share/libcskk/rules/metadata.toml"
+  "$HOME/.local/share/libcskk/rules/default/rule.toml"
+  "$HOME/.local/share/libcskk/rules/azik/rule.toml"
+  "$HOME/.local/share/libcskk/rules/passthrough_ascii/rule.toml"
 
   "$HOME/.config/hypr/bindings.conf"
   "$HOME/.config/hypr/hypridle.conf"
