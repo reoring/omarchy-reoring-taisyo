@@ -1,0 +1,710 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# WWAN latency-based 4G/5G switching daemon.
+# Monitors ping RTT/loss on wwan0 and automatically switches the modem
+# to LTE-only when latency degrades, returning to 5G-preferred when stable.
+#
+# Usage:
+#   wwan-latency-switcher daemon   — run as foreground daemon (systemd)
+#   wwan-latency-switcher status   — print current status JSON
+
+# ---------------------------------------------------------------------------
+# Defaults (overridable via /etc/wwan-latency-switcher/config)
+# ---------------------------------------------------------------------------
+MODEM_ID=${MODEM_ID:-0}
+IFACE=${IFACE:-wwan0}
+TARGETS=${TARGETS:-"1.1.1.1 8.8.8.8"}
+POLL_INTERVAL=${POLL_INTERVAL:-10}
+
+# Ping parameters (per target)
+PING_COUNT=${PING_COUNT:-5}
+PING_INTERVAL=${PING_INTERVAL:-0.2}
+PING_TIMEOUT=${PING_TIMEOUT:-1}
+
+# Degradation thresholds
+DEGRADE_MEDIAN=${DEGRADE_MEDIAN:-120}
+DEGRADE_P95=${DEGRADE_P95:-300}
+DEGRADE_LOSS=${DEGRADE_LOSS:-2}
+DEGRADE_WINDOW=${DEGRADE_WINDOW:-60}
+DEGRADE_COUNT=${DEGRADE_COUNT:-3}
+
+# Recovery thresholds
+RECOVER_MEDIAN=${RECOVER_MEDIAN:-70}
+RECOVER_P95=${RECOVER_P95:-150}
+RECOVER_LOSS=${RECOVER_LOSS:-1}
+RECOVER_WINDOW=${RECOVER_WINDOW:-600}
+
+# Flap guard
+COOLDOWN=${COOLDOWN:-300}
+MIN_STATE_TIME=${MIN_STATE_TIME:-600}
+MAX_SWITCHES_PER_HOUR=${MAX_SWITCHES_PER_HOUR:-2}
+
+# mmcli commands (%MODEM% replaced with MODEM_ID at runtime)
+CMD_FORCE_LTE=${CMD_FORCE_LTE:-"mmcli -m %MODEM% --set-allowed-modes=4g"}
+CMD_PREFER_5G=${CMD_PREFER_5G:-"mmcli -m %MODEM% --set-allowed-modes=4g|5g --set-preferred-mode=5g"}
+CMD_PREFER_5G_FALLBACK=${CMD_PREFER_5G_FALLBACK:-"mmcli -m %MODEM% --set-allowed-modes=4g|5g"}
+
+# Health check
+HEALTH_CHECK_TIMEOUT=${HEALTH_CHECK_TIMEOUT:-30}
+HEALTH_CHECK_PING_TARGET=${HEALTH_CHECK_PING_TARGET:-1.1.1.1}
+
+# Status file
+STATUS_DIR=${STATUS_DIR:-/run/wwan-latency-switcher}
+STATUS_FILE=${STATUS_FILE:-${STATUS_DIR}/status.json}
+
+# Config file
+CONFIG_FILE=${CONFIG_FILE:-/etc/wwan-latency-switcher/config}
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+_log() {
+  local level="$1"; shift
+  local msg="$*"
+  if command -v systemd-cat >/dev/null 2>&1; then
+    printf '%s\n' "[$level] $msg" | systemd-cat -t wwan-latency-switcher
+  elif command -v logger >/dev/null 2>&1; then
+    logger -t wwan-latency-switcher -- "[$level] $msg"
+  else
+    printf '%s [%s] %s\n' "$(date -Iseconds)" "$level" "$msg" >&2
+  fi
+}
+
+log_info()  { _log INFO  "$@"; }
+log_warn()  { _log WARN  "$@"; }
+log_err()   { _log ERROR "$@"; }
+log_event() { _log EVENT "$@"; }
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+fail() {
+  printf '%s\n' "$*" >&2
+  exit 1
+}
+
+need_cmd() {
+  command -v "$1" >/dev/null 2>&1 || fail "Missing command: $1"
+}
+
+now_epoch() {
+  date +%s
+}
+
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+load_config() {
+  if [[ -f "$CONFIG_FILE" ]]; then
+    # shellcheck disable=SC1090
+    source "$CONFIG_FILE"
+    log_info "config loaded from $CONFIG_FILE"
+  else
+    log_info "no config at $CONFIG_FILE, using defaults"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Ping & measurement
+# ---------------------------------------------------------------------------
+# ping_target <target>
+# Outputs: <median_rtt> <p95_rtt> <loss_pct>
+# All values as floats. On total failure: "0 0 100"
+ping_target() {
+  local target="$1"
+  local out
+
+  out=$("${PING_CMD:-ping}" -I "$IFACE" -c "$PING_COUNT" -i "$PING_INTERVAL" -W "$PING_TIMEOUT" "$target" 2>&1) || true
+
+  PING_OUT="$out" COUNT="$PING_COUNT" python3 -c '
+import os, re, sys
+
+out = os.environ.get("PING_OUT", "")
+count = int(os.environ.get("COUNT", "5"))
+
+# Extract individual RTTs from "time=XX.X ms"
+rtts = [float(m) for m in re.findall(r"time=([\d.]+)\s*ms", out)]
+
+# Extract loss percentage
+loss_match = re.search(r"(\d+(?:\.\d+)?)% packet loss", out)
+loss = float(loss_match.group(1)) if loss_match else 100.0
+
+if not rtts:
+    print("0 0 100")
+    sys.exit(0)
+
+rtts.sort()
+n = len(rtts)
+
+# Median
+if n % 2 == 1:
+    median = rtts[n // 2]
+else:
+    median = (rtts[n // 2 - 1] + rtts[n // 2]) / 2.0
+
+# P95
+idx = min(int(n * 0.95), n - 1)
+p95 = rtts[idx]
+
+print(f"{median:.2f} {p95:.2f} {loss:.1f}")
+'
+}
+
+# measure_all
+# Aggregates across all targets: median-of-medians for RTT, max loss
+# Outputs: <agg_median> <agg_p95> <agg_loss>
+measure_all() {
+  local medians=() p95s=() losses=()
+  local target result m p l
+
+  for target in $TARGETS; do
+    result=$(ping_target "$target")
+    read -r m p l <<<"$result"
+    medians+=("$m")
+    p95s+=("$p")
+    losses+=("$l")
+  done
+
+  MEDIANS="${medians[*]}" P95S="${p95s[*]}" LOSSES="${losses[*]}" python3 -c '
+import os
+
+def median(vals):
+    s = sorted(vals)
+    n = len(s)
+    if n == 0:
+        return 0.0
+    if n % 2 == 1:
+        return s[n // 2]
+    return (s[n // 2 - 1] + s[n // 2]) / 2.0
+
+medians = [float(x) for x in os.environ["MEDIANS"].split()]
+p95s = [float(x) for x in os.environ["P95S"].split()]
+losses = [float(x) for x in os.environ["LOSSES"].split()]
+
+agg_median = median(medians)
+agg_p95 = median(p95s)
+agg_loss = max(losses) if losses else 100.0
+
+print(f"{agg_median:.2f} {agg_p95:.2f} {agg_loss:.1f}")
+'
+}
+
+# ---------------------------------------------------------------------------
+# Sliding window (parallel arrays)
+# ---------------------------------------------------------------------------
+WIN_TS=()
+WIN_MEDIAN=()
+WIN_P95=()
+WIN_LOSS=()
+
+window_push() {
+  local ts="$1" median="$2" p95="$3" loss="$4"
+  WIN_TS+=("$ts")
+  WIN_MEDIAN+=("$median")
+  WIN_P95+=("$p95")
+  WIN_LOSS+=("$loss")
+}
+
+# window_trim <max_age_seconds>
+# Remove entries older than now - max_age
+window_trim() {
+  local max_age="$1"
+  local cutoff
+  cutoff=$(( $(now_epoch) - max_age ))
+
+  local new_ts=() new_med=() new_p95=() new_loss=()
+  local i
+  for (( i=0; i<${#WIN_TS[@]}; i++ )); do
+    if (( WIN_TS[i] >= cutoff )); then
+      new_ts+=("${WIN_TS[$i]}")
+      new_med+=("${WIN_MEDIAN[$i]}")
+      new_p95+=("${WIN_P95[$i]}")
+      new_loss+=("${WIN_LOSS[$i]}")
+    fi
+  done
+
+  WIN_TS=("${new_ts[@]+"${new_ts[@]}"}")
+  WIN_MEDIAN=("${new_med[@]+"${new_med[@]}"}")
+  WIN_P95=("${new_p95[@]+"${new_p95[@]}"}")
+  WIN_LOSS=("${new_loss[@]+"${new_loss[@]}"}")
+}
+
+# ---------------------------------------------------------------------------
+# Evaluation
+# ---------------------------------------------------------------------------
+
+# evaluate_degrade
+# Returns 0 (true) if degradation threshold met in DEGRADE_WINDOW, 1 otherwise
+evaluate_degrade() {
+  local cutoff
+  cutoff=$(( $(now_epoch) - DEGRADE_WINDOW ))
+
+  # Collect samples within window
+  local meds="" p95s="" losses=""
+  local i
+  for (( i=0; i<${#WIN_TS[@]}; i++ )); do
+    if (( WIN_TS[i] >= cutoff )); then
+      meds+="${WIN_MEDIAN[$i]} "
+      p95s+="${WIN_P95[$i]} "
+      losses+="${WIN_LOSS[$i]} "
+    fi
+  done
+
+  [[ -n "$meds" ]] || return 1
+
+  local bad_count
+  bad_count=$(MEDS="$meds" P95S="$p95s" LOSSES="$losses" \
+    TH_MED="$DEGRADE_MEDIAN" TH_P95="$DEGRADE_P95" TH_LOSS="$DEGRADE_LOSS" \
+    python3 -c '
+import os
+
+meds = [float(x) for x in os.environ["MEDS"].split()]
+p95s = [float(x) for x in os.environ["P95S"].split()]
+losses = [float(x) for x in os.environ["LOSSES"].split()]
+th_med = float(os.environ["TH_MED"])
+th_p95 = float(os.environ["TH_P95"])
+th_loss = float(os.environ["TH_LOSS"])
+
+bad = 0
+for m, p, l in zip(meds, p95s, losses):
+    if m > th_med or p > th_p95 or l > th_loss:
+        bad += 1
+print(bad)
+')
+
+  (( bad_count >= DEGRADE_COUNT ))
+}
+
+# evaluate_recover
+# Returns 0 (true) if ALL samples in RECOVER_WINDOW meet recovery thresholds
+evaluate_recover() {
+  local cutoff
+  cutoff=$(( $(now_epoch) - RECOVER_WINDOW ))
+
+  local meds="" p95s="" losses=""
+  local count=0 i
+  for (( i=0; i<${#WIN_TS[@]}; i++ )); do
+    if (( WIN_TS[i] >= cutoff )); then
+      meds+="${WIN_MEDIAN[$i]} "
+      p95s+="${WIN_P95[$i]} "
+      losses+="${WIN_LOSS[$i]} "
+      (( count++ )) || true
+    fi
+  done
+
+  # Need at least a few samples to declare recovery
+  (( count >= 3 )) || return 1
+
+  local all_good
+  all_good=$(MEDS="$meds" P95S="$p95s" LOSSES="$losses" \
+    TH_MED="$RECOVER_MEDIAN" TH_P95="$RECOVER_P95" TH_LOSS="$RECOVER_LOSS" \
+    python3 -c '
+import os
+
+meds = [float(x) for x in os.environ["MEDS"].split()]
+p95s = [float(x) for x in os.environ["P95S"].split()]
+losses = [float(x) for x in os.environ["LOSSES"].split()]
+th_med = float(os.environ["TH_MED"])
+th_p95 = float(os.environ["TH_P95"])
+th_loss = float(os.environ["TH_LOSS"])
+
+for m, p, l in zip(meds, p95s, losses):
+    if m >= th_med or p >= th_p95 or l >= th_loss:
+        print(0)
+        raise SystemExit(0)
+print(1)
+')
+
+  [[ "$all_good" == "1" ]]
+}
+
+# ---------------------------------------------------------------------------
+# Flap guard
+# ---------------------------------------------------------------------------
+SWITCH_HISTORY=()        # epoch timestamps of past switches
+LAST_SWITCH_TS=0
+STATE_ENTERED_TS=0
+
+# check_flap_guard
+# Returns 0 if switching is allowed, 1 if blocked
+check_flap_guard() {
+  local now
+  now=$(now_epoch)
+
+  # Cooldown after last switch
+  if (( LAST_SWITCH_TS > 0 && (now - LAST_SWITCH_TS) < COOLDOWN )); then
+    log_info "flap guard: cooldown ($(( now - LAST_SWITCH_TS ))s < ${COOLDOWN}s)"
+    return 1
+  fi
+
+  # Minimum time in current state
+  if (( STATE_ENTERED_TS > 0 && (now - STATE_ENTERED_TS) < MIN_STATE_TIME )); then
+    log_info "flap guard: min_state ($(( now - STATE_ENTERED_TS ))s < ${MIN_STATE_TIME}s)"
+    return 1
+  fi
+
+  # Rate limit: max N switches in last hour
+  local hour_ago=$(( now - 3600 ))
+  local recent=0
+  local ts
+  for ts in "${SWITCH_HISTORY[@]+"${SWITCH_HISTORY[@]}"}"; do
+    if (( ts >= hour_ago )); then
+      (( recent++ )) || true
+    fi
+  done
+  if (( recent >= MAX_SWITCHES_PER_HOUR )); then
+    log_info "flap guard: rate limit ($recent switches in last hour >= $MAX_SWITCHES_PER_HOUR)"
+    return 1
+  fi
+
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# Modem control
+# ---------------------------------------------------------------------------
+
+# expand_cmd <template>
+# Replace %MODEM% with $MODEM_ID
+expand_cmd() {
+  printf '%s\n' "${1//%MODEM%/$MODEM_ID}"
+}
+
+# health_check
+# Wait for modem connected state, verify route, quick ping
+# Returns 0 on success, 1 on failure
+health_check() {
+  local deadline=$(( $(now_epoch) + HEALTH_CHECK_TIMEOUT ))
+  local kv state
+
+  # Wait for modem state=connected
+  while (( $(now_epoch) < deadline )); do
+    kv=$(mmcli -m "$MODEM_ID" -K 2>/dev/null || true)
+    state=$(printf '%s\n' "$kv" | sed -n 's/^modem\.generic\.state=//p' | head -n1)
+    if [[ "$state" == "connected" ]]; then
+      break
+    fi
+    sleep 2
+  done
+
+  if [[ "$state" != "connected" ]]; then
+    log_err "health_check: modem state=$state (expected connected)"
+    return 1
+  fi
+
+  # Verify default route via IFACE (best effort)
+  if ! ip route show dev "$IFACE" 2>/dev/null | grep -q 'default\|0.0.0.0'; then
+    log_warn "health_check: no default route on $IFACE"
+  fi
+
+  # Quick ping
+  if ! ping -I "$IFACE" -c 1 -W 3 "$HEALTH_CHECK_PING_TARGET" >/dev/null 2>&1; then
+    log_warn "health_check: ping to $HEALTH_CHECK_PING_TARGET failed"
+    return 1
+  fi
+
+  log_info "health_check: OK (state=$state)"
+  return 0
+}
+
+# do_switch <new_state> <reason>
+do_switch() {
+  local new_state="$1"
+  local reason="$2"
+  local cmd_str
+
+  if [[ "$new_state" == "FORCE_LTE" ]]; then
+    cmd_str=$(expand_cmd "$CMD_FORCE_LTE")
+  else
+    cmd_str=$(expand_cmd "$CMD_PREFER_5G")
+  fi
+
+  log_event "switching to $new_state: $reason"
+  log_info "executing: $cmd_str"
+
+  local attempt
+  for attempt in 1 2; do
+    if eval "$cmd_str" >/dev/null 2>&1; then
+      if health_check; then
+        local now
+        now=$(now_epoch)
+        STATE="$new_state"
+        LAST_SWITCH_TS="$now"
+        STATE_ENTERED_TS="$now"
+        SWITCH_HISTORY+=("$now")
+        LAST_SWITCH_REASON="$reason"
+        log_event "switch complete: state=$STATE"
+        return 0
+      fi
+      log_warn "health_check failed after switch (attempt $attempt)"
+    else
+      log_err "mmcli command failed (attempt $attempt): $cmd_str"
+      # Try fallback for 5G
+      if [[ "$new_state" == "PREFER_5G" && "$attempt" -eq 1 ]]; then
+        local fb
+        fb=$(expand_cmd "$CMD_PREFER_5G_FALLBACK")
+        log_info "trying fallback: $fb"
+        if eval "$fb" >/dev/null 2>&1; then
+          if health_check; then
+            local now
+            now=$(now_epoch)
+            STATE="$new_state"
+            LAST_SWITCH_TS="$now"
+            STATE_ENTERED_TS="$now"
+            SWITCH_HISTORY+=("$now")
+            LAST_SWITCH_REASON="$reason (fallback)"
+            log_event "switch complete via fallback: state=$STATE"
+            return 0
+          fi
+        fi
+      fi
+    fi
+    (( attempt < 2 )) && sleep 3
+  done
+
+  log_err "switch to $new_state failed after retries"
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# Initial state detection
+# ---------------------------------------------------------------------------
+detect_initial_state() {
+  local kv allowed
+  kv=$(mmcli -m "$MODEM_ID" -K 2>/dev/null || true)
+  allowed=$(printf '%s\n' "$kv" | sed -n 's/^modem\.generic\.allowed-modes=//p' | head -n1)
+
+  log_info "modem allowed-modes: $allowed"
+
+  # If allowed modes include 5g/nr → PREFER_5G, otherwise FORCE_LTE
+  case "${allowed,,}" in
+    *5g*|*nr*)
+      STATE="PREFER_5G"
+      ;;
+    *4g*|*lte*)
+      STATE="FORCE_LTE"
+      ;;
+    *)
+      # Default to PREFER_5G if we can't determine
+      STATE="PREFER_5G"
+      ;;
+  esac
+
+  STATE_ENTERED_TS=$(now_epoch)
+  log_info "initial state: $STATE"
+}
+
+# ---------------------------------------------------------------------------
+# State machine
+# ---------------------------------------------------------------------------
+STATE="PREFER_5G"
+LAST_SWITCH_REASON=""
+
+state_machine_tick() {
+  case "$STATE" in
+    PREFER_5G)
+      if evaluate_degrade; then
+        if check_flap_guard; then
+          do_switch "FORCE_LTE" "latency degradation detected" || true
+        fi
+      fi
+      ;;
+    FORCE_LTE)
+      if evaluate_recover; then
+        if check_flap_guard; then
+          do_switch "PREFER_5G" "latency recovered" || true
+        fi
+      fi
+      ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
+# Status
+# ---------------------------------------------------------------------------
+write_status() {
+  local now
+  now=$(now_epoch)
+
+  local win_count=${#WIN_TS[@]}
+  local last_median="" last_p95="" last_loss=""
+  if (( win_count > 0 )); then
+    last_median="${WIN_MEDIAN[$((win_count - 1))]}"
+    last_p95="${WIN_P95[$((win_count - 1))]}"
+    last_loss="${WIN_LOSS[$((win_count - 1))]}"
+  fi
+
+  STATE_VAL="$STATE" \
+  NOW="$now" \
+  STATE_TS="$STATE_ENTERED_TS" \
+  LAST_SW="$LAST_SWITCH_TS" \
+  LAST_REASON="$LAST_SWITCH_REASON" \
+  SAMPLES="$win_count" \
+  L_MED="${last_median:-}" \
+  L_P95="${last_p95:-}" \
+  L_LOSS="${last_loss:-}" \
+  python3 -c '
+import json, os, sys, tempfile
+
+data = {
+    "state": os.environ["STATE_VAL"],
+    "timestamp": int(os.environ["NOW"]),
+    "state_entered": int(os.environ["STATE_TS"]),
+    "last_switch": int(os.environ["LAST_SW"]),
+    "last_switch_reason": os.environ["LAST_REASON"],
+    "window_samples": int(os.environ["SAMPLES"]),
+    "latest": {
+        "median_rtt": os.environ.get("L_MED", ""),
+        "p95_rtt": os.environ.get("L_P95", ""),
+        "loss_pct": os.environ.get("L_LOSS", ""),
+    },
+}
+
+status_file = os.environ.get("STATUS_FILE_PATH", "/run/wwan-latency-switcher/status.json")
+status_dir = os.path.dirname(status_file)
+if status_dir and not os.path.isdir(status_dir):
+    os.makedirs(status_dir, exist_ok=True)
+
+# Atomic write via tempfile
+fd, tmp = tempfile.mkstemp(dir=status_dir, suffix=".tmp")
+try:
+    with os.fdopen(fd, "w") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, status_file)
+except Exception:
+    try:
+        os.unlink(tmp)
+    except OSError:
+        pass
+    raise
+' 2>/dev/null || true
+}
+
+cmd_status() {
+  if [[ ! -f "$STATUS_FILE" ]]; then
+    echo "No status file found at $STATUS_FILE" >&2
+    echo "Is the daemon running?" >&2
+    exit 1
+  fi
+
+  if command -v jq >/dev/null 2>&1; then
+    jq . "$STATUS_FILE"
+  else
+    cat "$STATUS_FILE"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Signals & lifecycle
+# ---------------------------------------------------------------------------
+RUNNING=1
+
+cleanup() {
+  RUNNING=0
+  log_info "shutting down"
+  exit 0
+}
+
+reload_config() {
+  log_info "reloading config (SIGHUP)"
+  load_config
+}
+
+setup_signals() {
+  trap cleanup SIGTERM SIGINT
+  trap reload_config SIGHUP
+}
+
+# ---------------------------------------------------------------------------
+# Main daemon loop
+# ---------------------------------------------------------------------------
+main_daemon() {
+  if [[ "$(id -u)" -ne 0 ]]; then
+    fail "daemon must run as root (mmcli requires privileges)"
+  fi
+
+  need_cmd mmcli
+  need_cmd ping
+  need_cmd python3
+  need_cmd ip
+
+  load_config
+  setup_signals
+
+  # Export for python status writer
+  export STATUS_FILE_PATH="$STATUS_FILE"
+
+  # Ensure status directory exists
+  mkdir -p "$STATUS_DIR" 2>/dev/null || true
+
+  detect_initial_state
+
+  log_info "daemon started: iface=$IFACE modem=$MODEM_ID targets=[$TARGETS]"
+  log_info "thresholds: degrade(med>$DEGRADE_MEDIAN p95>$DEGRADE_P95 loss>$DEGRADE_LOSS) recover(med<$RECOVER_MEDIAN p95<$RECOVER_P95 loss<$RECOVER_LOSS)"
+
+  local max_window
+  # Keep window data for the longer of degrade/recover windows, plus some margin
+  (( max_window = RECOVER_WINDOW + 60 ))
+
+  while (( RUNNING )); do
+    local ts result agg_median agg_p95 agg_loss
+    ts=$(now_epoch)
+
+    result=$(measure_all) || result="0 0 100"
+    read -r agg_median agg_p95 agg_loss <<<"$result"
+
+    log_info "sample: median=${agg_median}ms p95=${agg_p95}ms loss=${agg_loss}% state=$STATE"
+
+    window_push "$ts" "$agg_median" "$agg_p95" "$agg_loss"
+    window_trim "$max_window"
+
+    state_machine_tick
+
+    write_status
+
+    sleep "$POLL_INTERVAL" &
+    wait $! 2>/dev/null || true
+  done
+}
+
+# ---------------------------------------------------------------------------
+# Usage / dispatch
+# ---------------------------------------------------------------------------
+usage() {
+  cat >&2 <<'EOF'
+Usage:
+  wwan-latency-switcher daemon    Run monitoring daemon (requires root)
+  wwan-latency-switcher status    Show current status
+
+Env / Config (/etc/wwan-latency-switcher/config):
+  MODEM_ID=0             ModemManager modem index
+  IFACE=wwan0            Network interface to monitor
+  TARGETS="1.1.1.1 ..."  Space-separated ping targets
+  POLL_INTERVAL=10        Seconds between measurements
+EOF
+}
+
+cmd="${1:-}"
+case "$cmd" in
+  daemon)
+    main_daemon
+    ;;
+  status)
+    cmd_status
+    ;;
+  -h|--help|help)
+    usage
+    exit 0
+    ;;
+  "")
+    usage
+    exit 2
+    ;;
+  *)
+    printf 'Unknown command: %s\n' "$cmd" >&2
+    usage
+    exit 2
+    ;;
+esac

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: hypr-ws <main|park> <goto|move|move-silent> <ws> [fallback_ws]" >&2
+  echo "usage: hypr-ws <main|park|ext|int> <goto|move|move-silent> <ws> [fallback_ws]" >&2
   exit 2
 }
 
@@ -76,7 +76,27 @@ if [[ "$target" == "park" ]]; then
   if [[ -n "$parking_monitor" ]]; then
     dest_monitor="$parking_monitor"
   else
-    # No second monitor: fall back to main (usually 11-15) behavior.
+    # No second monitor: fall back to main workspace.
+    dest_monitor="$main_monitor"
+    if [[ -n "$fallback_ws" ]]; then
+      dest_ws="$fallback_ws"
+    fi
+  fi
+elif [[ "$target" == "ext" ]]; then
+  if [[ -n "$external" ]]; then
+    dest_monitor="$external"
+  else
+    # No external monitor: fall back to main workspace.
+    dest_monitor="$main_monitor"
+    if [[ -n "$fallback_ws" ]]; then
+      dest_ws="$fallback_ws"
+    fi
+  fi
+elif [[ "$target" == "int" ]]; then
+  if [[ -n "$internal" ]]; then
+    dest_monitor="$internal"
+  else
+    # No internal monitor: fall back to main workspace.
     dest_monitor="$main_monitor"
     if [[ -n "$fallback_ws" ]]; then
       dest_ws="$fallback_ws"

@@ -114,6 +114,7 @@ preflight() {
     .local/bin/waybar-cursor-invisible \
     .local/bin/waybar-wwan \
     .local/bin/wwan-menu \
+    .local/bin/wwan-latency-switcher \
     .local/bin/waybar-tailscale \
     .local/bin/waybar-tailscale-toggle \
     .local/bin/waybar-tailscale-peers
@@ -712,6 +713,7 @@ install_file "$SRC_HOME/.local/bin/hypr-lid-suspend-toggle" "$HOME/.local/bin/hy
 install_file "$SRC_HOME/.local/bin/hypr-keyboard-clean-toggle" "$HOME/.local/bin/hypr-keyboard-clean-toggle" 0755
 install_file "$SRC_HOME/.local/bin/hypr-cursor-invisible-toggle" "$HOME/.local/bin/hypr-cursor-invisible-toggle" 0755
 install_file "$SRC_HOME/.local/bin/ddc-brightness" "$HOME/.local/bin/ddc-brightness" 0755
+install_file "$SRC_HOME/.local/bin/wwan-latency-switcher" "$HOME/.local/bin/wwan-latency-switcher" 0755
 
 # systemd user service for lid toggle
 install_file "$SRC_HOME/.config/systemd/user/lid-nosuspend.service" "$HOME/.config/systemd/user/lid-nosuspend.service" 0644
