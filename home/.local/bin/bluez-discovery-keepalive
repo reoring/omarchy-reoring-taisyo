@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+
+import argparse
+import signal
+import sys
+import time
+
+import dbus
+
+
+BLUEZ = "org.bluez"
+
+
+def _find_adapter(bus: dbus.SystemBus, preferred: str | None) -> str:
+    om = dbus.Interface(bus.get_object(BLUEZ, "/"), "org.freedesktop.DBus.ObjectManager")
+    objs = om.GetManagedObjects()
+
+    adapters: list[str] = []
+    for path, ifaces in objs.items():
+        if "org.bluez.Adapter1" in ifaces:
+            adapters.append(str(path))
+
+    if preferred and preferred in adapters:
+        return preferred
+    if adapters:
+        adapters.sort()
+        return adapters[0]
+    raise RuntimeError("No Bluetooth adapter found")
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(add_help=True)
+    p.add_argument("--adapter", default=None)
+    p.add_argument("--timeout", type=float, default=15.0)
+    args = p.parse_args()
+
+    bus = dbus.SystemBus()
+    adapter_path = _find_adapter(bus, args.adapter)
+    adapter = dbus.Interface(bus.get_object(BLUEZ, adapter_path), "org.bluez.Adapter1")
+
+    stop = False
+
+    def _sig(_signum: int, _frame: object) -> None:
+        nonlocal stop
+        stop = True
+
+    signal.signal(signal.SIGINT, _sig)
+    signal.signal(signal.SIGTERM, _sig)
+
+    try:
+        try:
+            adapter.StartDiscovery()
+        except dbus.DBusException:
+            pass
+
+        deadline = time.time() + max(0.0, float(args.timeout))
+        while not stop and time.time() < deadline:
+            time.sleep(0.2)
+    finally:
+        try:
+            adapter.StopDiscovery()
+        except dbus.DBusException:
+            pass
+
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except Exception as e:
+        sys.stderr.write(f"bluez-discovery-keepalive: {e}\n")
+        raise

@@ -9,6 +9,7 @@
   "modules-right": [
     "group/tray-expander",
     "custom/tailscale",
+    "custom/bt-roba",
     "bluetooth",
     "custom/wwan",
     "network",
@@ -173,6 +174,14 @@
     "format-no-controller": "",
     "tooltip-format": "Devices connected: {num_connections}",
     "on-click": "omarchy-launch-bluetooth"
+  },
+  "custom/bt-roba": {
+    "exec": "$HOME/.local/bin/waybar-bt-roba",
+    "return-type": "json",
+    "interval": 10,
+    "signal": 17,
+    "on-click": "$HOME/.local/bin/waybar-bt-roba-toggle",
+    "on-click-right": "omarchy-launch-bluetooth"
   },
   "pulseaudio": {
     "format": "{icon}",

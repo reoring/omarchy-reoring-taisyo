@@ -106,12 +106,17 @@ preflight() {
     .local/bin/hypr-cursor-invisible-toggle \
     .local/bin/fcitx-en-toggle \
     .local/bin/ddc-brightness \
+    .local/bin/bt-roba \
+    .local/bin/bluez-agent-auto \
+    .local/bin/bluez-discovery-keepalive \
     .local/bin/waybar-main-monitor \
     .local/bin/waybar-ddc-brightness \
     .local/bin/waybar-lid-suspend \
     .local/bin/waybar-fcitx-en \
     .local/bin/waybar-keyboard-clean \
     .local/bin/waybar-cursor-invisible \
+    .local/bin/waybar-bt-roba \
+    .local/bin/waybar-bt-roba-toggle \
     .local/bin/waybar-wwan \
     .local/bin/wwan-menu \
     .local/bin/wwan-latency-switcher \
@@ -393,8 +398,66 @@ def is_section_header(line: str) -> bool:
     return s.startswith("[") and s.endswith("]")
 
 ascii_section = """[direct.ascii]
-\"C-g\" = [\"Abort\"]
+\"C-g\" = [\"PassthroughKeyEvent\"]
 \"C-j\" = [\"ChangeInputMode(Hiragana)\"]
+
+# Common Ctrl shortcuts (pass through to apps).
+\"C-a\" = [\"PassthroughKeyEvent\"]
+\"C-b\" = [\"PassthroughKeyEvent\"]
+\"C-c\" = [\"PassthroughKeyEvent\"]
+\"C-d\" = [\"PassthroughKeyEvent\"]
+\"C-e\" = [\"PassthroughKeyEvent\"]
+\"C-f\" = [\"PassthroughKeyEvent\"]
+\"C-h\" = [\"PassthroughKeyEvent\"]
+\"C-i\" = [\"PassthroughKeyEvent\"]
+\"C-k\" = [\"PassthroughKeyEvent\"]
+\"C-l\" = [\"PassthroughKeyEvent\"]
+\"C-n\" = [\"PassthroughKeyEvent\"]
+\"C-o\" = [\"PassthroughKeyEvent\"]
+\"C-p\" = [\"PassthroughKeyEvent\"]
+\"C-q\" = [\"PassthroughKeyEvent\"]
+\"C-r\" = [\"PassthroughKeyEvent\"]
+\"C-s\" = [\"PassthroughKeyEvent\"]
+\"C-t\" = [\"PassthroughKeyEvent\"]
+\"C-u\" = [\"PassthroughKeyEvent\"]
+\"C-v\" = [\"PassthroughKeyEvent\"]
+\"C-w\" = [\"PassthroughKeyEvent\"]
+\"C-x\" = [\"PassthroughKeyEvent\"]
+\"C-y\" = [\"PassthroughKeyEvent\"]
+\"C-z\" = [\"PassthroughKeyEvent\"]
+
+\"C-A\" = [\"PassthroughKeyEvent\"]
+\"C-B\" = [\"PassthroughKeyEvent\"]
+\"C-C\" = [\"PassthroughKeyEvent\"]
+\"C-D\" = [\"PassthroughKeyEvent\"]
+\"C-E\" = [\"PassthroughKeyEvent\"]
+\"C-F\" = [\"PassthroughKeyEvent\"]
+\"C-G\" = [\"PassthroughKeyEvent\"]
+\"C-H\" = [\"PassthroughKeyEvent\"]
+\"C-I\" = [\"PassthroughKeyEvent\"]
+\"C-J\" = [\"PassthroughKeyEvent\"]
+\"C-K\" = [\"PassthroughKeyEvent\"]
+\"C-L\" = [\"PassthroughKeyEvent\"]
+\"C-M\" = [\"PassthroughKeyEvent\"]
+\"C-N\" = [\"PassthroughKeyEvent\"]
+\"C-O\" = [\"PassthroughKeyEvent\"]
+\"C-P\" = [\"PassthroughKeyEvent\"]
+\"C-Q\" = [\"PassthroughKeyEvent\"]
+\"C-R\" = [\"PassthroughKeyEvent\"]
+\"C-S\" = [\"PassthroughKeyEvent\"]
+\"C-T\" = [\"PassthroughKeyEvent\"]
+\"C-U\" = [\"PassthroughKeyEvent\"]
+\"C-V\" = [\"PassthroughKeyEvent\"]
+\"C-W\" = [\"PassthroughKeyEvent\"]
+\"C-X\" = [\"PassthroughKeyEvent\"]
+\"C-Y\" = [\"PassthroughKeyEvent\"]
+\"C-Z\" = [\"PassthroughKeyEvent\"]
+
+\"C-bracketleft\" = [\"PassthroughKeyEvent\"]
+\"C-bracketright\" = [\"PassthroughKeyEvent\"]
+\"C-backslash\" = [\"PassthroughKeyEvent\"]
+\"C-asciicircum\" = [\"PassthroughKeyEvent\"]
+\"C-underscore\" = [\"PassthroughKeyEvent\"]
 
 # Pass most keys through so apps/games receive key events.
 \"Escape\" = [\"PassthroughKeyEvent\"]
@@ -511,6 +574,55 @@ ascii_section = """[direct.ascii]
 \"asterisk\" = [\"PassthroughKeyEvent\"]
 \"parenleft\" = [\"PassthroughKeyEvent\"]
 \"parenright\" = [\"PassthroughKeyEvent\"]
+
+# Shifted variants. Depending on the backend, some keys may be reported as an
+# unshifted keysym with Shift modifier instead of a distinct keysym.
+\"(shift 0)\" = [\"PassthroughKeyEvent\"]
+\"(shift 1)\" = [\"PassthroughKeyEvent\"]
+\"(shift 2)\" = [\"PassthroughKeyEvent\"]
+\"(shift 3)\" = [\"PassthroughKeyEvent\"]
+\"(shift 4)\" = [\"PassthroughKeyEvent\"]
+\"(shift 5)\" = [\"PassthroughKeyEvent\"]
+\"(shift 6)\" = [\"PassthroughKeyEvent\"]
+\"(shift 7)\" = [\"PassthroughKeyEvent\"]
+\"(shift 8)\" = [\"PassthroughKeyEvent\"]
+\"(shift 9)\" = [\"PassthroughKeyEvent\"]
+
+\"(shift minus)\" = [\"PassthroughKeyEvent\"]
+\"(shift equal)\" = [\"PassthroughKeyEvent\"]
+\"(shift bracketleft)\" = [\"PassthroughKeyEvent\"]
+\"(shift bracketright)\" = [\"PassthroughKeyEvent\"]
+\"(shift backslash)\" = [\"PassthroughKeyEvent\"]
+\"(shift semicolon)\" = [\"PassthroughKeyEvent\"]
+\"(shift apostrophe)\" = [\"PassthroughKeyEvent\"]
+\"(shift comma)\" = [\"PassthroughKeyEvent\"]
+\"(shift period)\" = [\"PassthroughKeyEvent\"]
+\"(shift slash)\" = [\"PassthroughKeyEvent\"]
+\"(shift grave)\" = [\"PassthroughKeyEvent\"]
+
+# Some backends keep Shift modifier even when keysym is already shifted.
+\"(shift underscore)\" = [\"PassthroughKeyEvent\"]
+\"(shift plus)\" = [\"PassthroughKeyEvent\"]
+\"(shift braceleft)\" = [\"PassthroughKeyEvent\"]
+\"(shift braceright)\" = [\"PassthroughKeyEvent\"]
+\"(shift bar)\" = [\"PassthroughKeyEvent\"]
+\"(shift colon)\" = [\"PassthroughKeyEvent\"]
+\"(shift quotedbl)\" = [\"PassthroughKeyEvent\"]
+\"(shift less)\" = [\"PassthroughKeyEvent\"]
+\"(shift greater)\" = [\"PassthroughKeyEvent\"]
+\"(shift question)\" = [\"PassthroughKeyEvent\"]
+\"(shift asciitilde)\" = [\"PassthroughKeyEvent\"]
+
+\"(shift exclam)\" = [\"PassthroughKeyEvent\"]
+\"(shift at)\" = [\"PassthroughKeyEvent\"]
+\"(shift numbersign)\" = [\"PassthroughKeyEvent\"]
+\"(shift dollar)\" = [\"PassthroughKeyEvent\"]
+\"(shift percent)\" = [\"PassthroughKeyEvent\"]
+\"(shift asciicircum)\" = [\"PassthroughKeyEvent\"]
+\"(shift ampersand)\" = [\"PassthroughKeyEvent\"]
+\"(shift asterisk)\" = [\"PassthroughKeyEvent\"]
+\"(shift parenleft)\" = [\"PassthroughKeyEvent\"]
+\"(shift parenright)\" = [\"PassthroughKeyEvent\"]
 """
 
 out = []
@@ -698,22 +810,25 @@ else
 fi
 
 # Hypr helper scripts
-install_file "$SRC_HOME/.local/bin/fcitx-en-toggle" "$HOME/.local/bin/fcitx-en-toggle" 0755
-install_file "$SRC_HOME/.local/bin/hypr-ws" "$HOME/.local/bin/hypr-ws" 0755
-install_file "$SRC_HOME/.local/bin/hyprsunset-adjust" "$HOME/.local/bin/hyprsunset-adjust" 0755
-install_file "$SRC_HOME/.local/bin/hypr-opacity-adjust" "$HOME/.local/bin/hypr-opacity-adjust" 0755
-install_file "$SRC_HOME/.local/bin/hypr-blur-adjust" "$HOME/.local/bin/hypr-blur-adjust" 0755
-install_file "$SRC_HOME/.local/bin/hypr-gaps-adjust" "$HOME/.local/bin/hypr-gaps-adjust" 0755
-install_file "$SRC_HOME/.local/bin/hypr-scale-adjust" "$HOME/.local/bin/hypr-scale-adjust" 0755
-install_file "$SRC_HOME/.local/bin/hypr-refresh-toggle" "$HOME/.local/bin/hypr-refresh-toggle" 0755
-install_file "$SRC_HOME/.local/bin/hypr-main-monitor-toggle" "$HOME/.local/bin/hypr-main-monitor-toggle" 0755
-install_file "$SRC_HOME/.local/bin/hypr-monitor-position" "$HOME/.local/bin/hypr-monitor-position" 0755
-install_file "$SRC_HOME/.local/bin/hypr-internal-display-toggle" "$HOME/.local/bin/hypr-internal-display-toggle" 0755
-install_file "$SRC_HOME/.local/bin/hypr-lid-suspend-toggle" "$HOME/.local/bin/hypr-lid-suspend-toggle" 0755
-install_file "$SRC_HOME/.local/bin/hypr-keyboard-clean-toggle" "$HOME/.local/bin/hypr-keyboard-clean-toggle" 0755
-install_file "$SRC_HOME/.local/bin/hypr-cursor-invisible-toggle" "$HOME/.local/bin/hypr-cursor-invisible-toggle" 0755
-install_file "$SRC_HOME/.local/bin/ddc-brightness" "$HOME/.local/bin/ddc-brightness" 0755
-install_file "$SRC_HOME/.local/bin/wwan-latency-switcher" "$HOME/.local/bin/wwan-latency-switcher" 0755
+  install_file "$SRC_HOME/.local/bin/fcitx-en-toggle" "$HOME/.local/bin/fcitx-en-toggle" 0755
+  install_file "$SRC_HOME/.local/bin/hypr-ws" "$HOME/.local/bin/hypr-ws" 0755
+  install_file "$SRC_HOME/.local/bin/hyprsunset-adjust" "$HOME/.local/bin/hyprsunset-adjust" 0755
+  install_file "$SRC_HOME/.local/bin/hypr-opacity-adjust" "$HOME/.local/bin/hypr-opacity-adjust" 0755
+  install_file "$SRC_HOME/.local/bin/hypr-blur-adjust" "$HOME/.local/bin/hypr-blur-adjust" 0755
+  install_file "$SRC_HOME/.local/bin/hypr-gaps-adjust" "$HOME/.local/bin/hypr-gaps-adjust" 0755
+  install_file "$SRC_HOME/.local/bin/hypr-scale-adjust" "$HOME/.local/bin/hypr-scale-adjust" 0755
+  install_file "$SRC_HOME/.local/bin/hypr-refresh-toggle" "$HOME/.local/bin/hypr-refresh-toggle" 0755
+  install_file "$SRC_HOME/.local/bin/hypr-main-monitor-toggle" "$HOME/.local/bin/hypr-main-monitor-toggle" 0755
+  install_file "$SRC_HOME/.local/bin/hypr-monitor-position" "$HOME/.local/bin/hypr-monitor-position" 0755
+  install_file "$SRC_HOME/.local/bin/hypr-internal-display-toggle" "$HOME/.local/bin/hypr-internal-display-toggle" 0755
+  install_file "$SRC_HOME/.local/bin/hypr-lid-suspend-toggle" "$HOME/.local/bin/hypr-lid-suspend-toggle" 0755
+  install_file "$SRC_HOME/.local/bin/hypr-keyboard-clean-toggle" "$HOME/.local/bin/hypr-keyboard-clean-toggle" 0755
+  install_file "$SRC_HOME/.local/bin/hypr-cursor-invisible-toggle" "$HOME/.local/bin/hypr-cursor-invisible-toggle" 0755
+  install_file "$SRC_HOME/.local/bin/ddc-brightness" "$HOME/.local/bin/ddc-brightness" 0755
+  install_file "$SRC_HOME/.local/bin/bt-roba" "$HOME/.local/bin/bt-roba" 0755
+  install_file "$SRC_HOME/.local/bin/bluez-agent-auto" "$HOME/.local/bin/bluez-agent-auto" 0755
+  install_file "$SRC_HOME/.local/bin/bluez-discovery-keepalive" "$HOME/.local/bin/bluez-discovery-keepalive" 0755
+  install_file "$SRC_HOME/.local/bin/wwan-latency-switcher" "$HOME/.local/bin/wwan-latency-switcher" 0755
 
 # systemd user service for lid toggle
 install_file "$SRC_HOME/.config/systemd/user/lid-nosuspend.service" "$HOME/.config/systemd/user/lid-nosuspend.service" 0644
@@ -742,6 +857,8 @@ else
   install_file "$SRC_HOME/.local/bin/waybar-lid-suspend" "$HOME/.local/bin/waybar-lid-suspend" 0755
   install_file "$SRC_HOME/.local/bin/waybar-keyboard-clean" "$HOME/.local/bin/waybar-keyboard-clean" 0755
   install_file "$SRC_HOME/.local/bin/waybar-cursor-invisible" "$HOME/.local/bin/waybar-cursor-invisible" 0755
+  install_file "$SRC_HOME/.local/bin/waybar-bt-roba" "$HOME/.local/bin/waybar-bt-roba" 0755
+  install_file "$SRC_HOME/.local/bin/waybar-bt-roba-toggle" "$HOME/.local/bin/waybar-bt-roba-toggle" 0755
   install_file "$SRC_HOME/.local/bin/waybar-wwan" "$HOME/.local/bin/waybar-wwan" 0755
   install_file "$SRC_HOME/.local/bin/wwan-menu" "$HOME/.local/bin/wwan-menu" 0755
   install_file "$SRC_HOME/.local/bin/waybar-tailscale" "$HOME/.local/bin/waybar-tailscale" 0755

@@ -41,6 +41,7 @@
 #custom-fcitx-en,
 #custom-keyboard-clean,
 #custom-cursor-invisible,
+#custom-bt-roba,
 #custom-update {
   min-width: 12px;
   margin: 0 7.5px;
@@ -141,6 +142,12 @@ tooltip {
 }
 
 #custom-ddc-brightness.unavailable {
+  opacity: 0.55;
+}
+
+#custom-bt-roba.disconnected,
+#custom-bt-roba.unpaired,
+#custom-bt-roba.unknown {
   opacity: 0.55;
 }
 

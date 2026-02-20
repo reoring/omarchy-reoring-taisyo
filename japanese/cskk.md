@@ -56,7 +56,7 @@ path = "passthrough_ascii"
 
 ```toml
 [direct.ascii]
-"C-g" = ["Abort"]
+"C-g" = ["PassthroughKeyEvent"]
 "C-j" = ["ChangeInputMode(Hiragana)"]
 
 "w" = ["PassthroughKeyEvent"]
@@ -70,6 +70,11 @@ path = "passthrough_ascii"
 ```
 
 実際は、英数・記号・矢印キー等も広めにパススルーする方がトラブルが少ない。
+
+補足:
+
+- Vim/アプリ側の `Ctrl-*` ショートカットも素通ししたいことが多い（例: `C-a`..`C-z`, `C-[`, `C-]` など）。
+- Shift 記号は環境によって `(shift 4)` のように "修飾付き" として来たり、`(shift dollar)` のように "既にshift済み keysym + Shift 修飾" で来ることもあるため、両方をカバーする方が安全。
 
 ## このリポジトリでの反映
 

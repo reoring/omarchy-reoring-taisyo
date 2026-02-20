@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+action="${1:-pair}"
+case "$action" in
+  pair|connect) ;;
+  *) action="pair" ;;
+esac
+
+out=""
+if out=$("$HOME/.local/bin/bt-roba" "$action" 2>&1); then
+  :
+else
+  if command -v notify-send >/dev/null 2>&1; then
+    # Keep notifications readable.
+    out_short="$out"
+    if [[ ${#out_short} -gt 800 ]]; then
+      out_short="${out_short:0:800}..."
+    fi
+    notify-send "Bluetooth" "roBa: ${action} failed"$'\n'"$out_short"
+  fi
+fi
+
+pkill -RTMIN+17 waybar >/dev/null 2>&1 || true

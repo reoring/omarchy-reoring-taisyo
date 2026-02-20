@@ -1,0 +1,334 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  echo "usage: bt-roba [pair|connect|status]" >&2
+  exit 2
+}
+
+action="${1:-pair}"
+case "$action" in
+  pair|connect|status) ;;
+  -h|--help) usage ;;
+  *) usage ;;
+esac
+
+SERVICE="org.bluez"
+TARGET_ALIAS_LC="roba"
+ADAPTER_DEFAULT="/org/bluez/hci0"
+AGENT_BIN="$HOME/.local/bin/bluez-agent-auto"
+DISCOVERY_BIN="$HOME/.local/bin/bluez-discovery-keepalive"
+
+if ! command -v busctl >/dev/null 2>&1; then
+  echo "bt-roba: busctl not found" >&2
+  exit 1
+fi
+
+adapter="$ADAPTER_DEFAULT"
+if ! busctl introspect "$SERVICE" "$adapter" org.bluez.Adapter1 >/dev/null 2>&1; then
+  adapter=""
+  while IFS= read -r p; do
+    case "$p" in
+      /org/bluez/hci*) ;;
+      *) continue ;;
+    esac
+    if busctl introspect "$SERVICE" "$p" org.bluez.Adapter1 >/dev/null 2>&1; then
+      adapter="$p"
+      break
+    fi
+  done < <(busctl tree --list "$SERVICE")
+fi
+
+if [[ -z "$adapter" ]]; then
+  echo "bt-roba: no Bluetooth adapter found" >&2
+  exit 1
+fi
+
+get_prop() {
+  local path="$1" prop="$2" out type value
+  out="$(busctl get-property "$SERVICE" "$path" org.bluez.Device1 "$prop" 2>/dev/null || true)"
+  [[ -n "$out" ]] || return 1
+  type="${out%% *}"
+  value="${out#* }"
+  case "$type" in
+    s|o)
+      value="${value#\"}"
+      value="${value%\"}"
+      ;;
+  esac
+  printf '%s' "$value"
+}
+
+list_matching_devices() {
+  local p alias name
+  while IFS= read -r p; do
+    case "$p" in
+      "$adapter"/dev_*) ;;
+      *) continue ;;
+    esac
+    case "$p" in
+      */dev_*/*) continue ;;
+    esac
+
+    alias="$(get_prop "$p" Alias || true)"
+    name="$(get_prop "$p" Name || true)"
+    if [[ -z "$alias" && -z "$name" ]]; then
+      continue
+    fi
+
+    if [[ "${alias,,}" == *"$TARGET_ALIAS_LC"* || "${name,,}" == *"$TARGET_ALIAS_LC"* ]]; then
+      printf '%s\n' "$p"
+    fi
+  done < <(busctl tree --list "$SERVICE")
+}
+
+choose_device() {
+  local p
+  local -a paths=()
+  while IFS= read -r p; do
+    [[ -n "$p" ]] || continue
+    paths+=("$p")
+  done < <(list_matching_devices)
+
+  if [[ ${#paths[@]} -eq 0 ]]; then
+    return 1
+  fi
+
+  if [[ "$action" == "status" ]]; then
+    for p in "${paths[@]}"; do
+      if [[ "$(get_prop "$p" Connected || echo false)" == "true" ]]; then
+        printf '%s\n' "$p"
+        return 0
+      fi
+    done
+  fi
+
+  if [[ "$action" == "connect" ]]; then
+    for p in "${paths[@]}"; do
+      if [[ "$(get_prop "$p" Paired || echo false)" == "true" ]]; then
+        printf '%s\n' "$p"
+        return 0
+      fi
+    done
+  fi
+
+  if [[ "$action" == "pair" ]]; then
+    for p in "${paths[@]}"; do
+      if [[ "$(get_prop "$p" Paired || echo false)" != "true" ]]; then
+        printf '%s\n' "$p"
+        return 0
+      fi
+    done
+  fi
+
+  printf '%s\n' "${paths[0]}"
+}
+
+device_path="$(choose_device 2>/dev/null || true)"
+
+discovery_started=0
+discover_pid=""
+agent_pid=""
+agent_log=""
+cleanup() {
+  if [[ -n "$discover_pid" ]]; then
+    kill "$discover_pid" >/dev/null 2>&1 || true
+    wait "$discover_pid" >/dev/null 2>&1 || true
+  fi
+
+  if [[ -n "$agent_pid" ]]; then
+    kill "$agent_pid" >/dev/null 2>&1 || true
+    wait "$agent_pid" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$agent_log" && -f "$agent_log" ]]; then
+    rm -f "$agent_log" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
+
+start_discovery() {
+  local secs="$1"
+  if [[ -x "$DISCOVERY_BIN" ]]; then
+    "$DISCOVERY_BIN" --adapter "$adapter" --timeout "$secs" >/dev/null 2>&1 &
+    discover_pid=$!
+    return 0
+  fi
+
+  # Fallback (non-persistent): may stop immediately when busctl exits.
+  busctl call "$SERVICE" "$adapter" org.bluez.Adapter1 StartDiscovery >/dev/null 2>&1 || true
+  discovery_started=1
+}
+
+stop_discovery() {
+  if [[ -n "$discover_pid" ]]; then
+    kill "$discover_pid" >/dev/null 2>&1 || true
+    wait "$discover_pid" >/dev/null 2>&1 || true
+    discover_pid=""
+    return 0
+  fi
+
+  if [[ "$discovery_started" == "1" ]]; then
+    busctl call "$SERVICE" "$adapter" org.bluez.Adapter1 StopDiscovery >/dev/null 2>&1 || true
+    discovery_started=0
+  fi
+}
+
+if [[ -z "$device_path" ]]; then
+  start_discovery 25
+
+  for _ in {1..25}; do
+    device_path="$(choose_device 2>/dev/null || true)"
+    [[ -n "$device_path" ]] && break
+    sleep 1
+  done
+
+  stop_discovery
+fi
+
+if [[ -z "$device_path" ]]; then
+  echo "bt-roba: device '$TARGET_ALIAS_LC' not found (put it in pairing mode and retry)" >&2
+  exit 1
+fi
+
+if [[ "$action" == "status" ]]; then
+  busctl get-property "$SERVICE" "$device_path" org.bluez.Device1 Address
+  busctl get-property "$SERVICE" "$device_path" org.bluez.Device1 AddressType
+  busctl get-property "$SERVICE" "$device_path" org.bluez.Device1 Alias
+  busctl get-property "$SERVICE" "$device_path" org.bluez.Device1 Connected
+  busctl get-property "$SERVICE" "$device_path" org.bluez.Device1 Paired
+  busctl get-property "$SERVICE" "$device_path" org.bluez.Device1 Trusted
+  exit 0
+fi
+
+# For pairing mode devices, do a short scan even if we already have a cached device.
+if [[ "$action" == "pair" ]]; then
+  start_discovery 10
+
+  for _ in {1..6}; do
+    candidate="$(choose_device 2>/dev/null || true)"
+    if [[ -n "$candidate" ]]; then
+      device_path="$candidate"
+      if [[ "$(get_prop "$device_path" Paired || echo false)" != "true" ]]; then
+        break
+      fi
+    fi
+    sleep 1
+  done
+
+  stop_discovery
+fi
+
+paired="$(get_prop "$device_path" Paired || echo false)"
+
+if [[ "$action" == "pair" && "${paired:-}" != "true" ]]; then
+  busctl set-property "$SERVICE" "$adapter" org.bluez.Adapter1 Pairable b true >/dev/null 2>&1 || true
+
+  if [[ ! -x "$AGENT_BIN" ]]; then
+    echo "bt-roba: $AGENT_BIN not found (needed for pairing)" >&2
+    exit 1
+  fi
+
+  agent_log="$(mktemp -t bluez-agent-auto.XXXXXX)"
+  "$AGENT_BIN" --timeout 120 >"$agent_log" 2>&1 &
+  agent_pid=$!
+  # Give the agent a moment to register.
+  sleep 0.2
+
+  if ! out="$(busctl call "$SERVICE" "$device_path" org.bluez.Device1 Pair 2>&1)"; then
+    echo "$out" >&2
+    if [[ -s "$agent_log" ]]; then
+      echo "bt-roba: agent log:" >&2
+      sed -n '1,50p' "$agent_log" >&2 || true
+    fi
+    exit 1
+  fi
+
+  # Stop the agent once pairing completes.
+  kill "$agent_pid" >/dev/null 2>&1 || true
+  wait "$agent_pid" >/dev/null 2>&1 || true
+  agent_pid=""
+  rm -f "$agent_log" 2>/dev/null || true
+  agent_log=""
+fi
+
+if ! busctl set-property "$SERVICE" "$device_path" org.bluez.Device1 Trusted b true >/dev/null 2>&1; then
+  echo "bt-roba: warning: failed to set Trusted=true" >&2
+fi
+
+connect_attempts=0
+last_err=""
+while [[ "$(get_prop "$device_path" Connected || echo false)" != "true" && $connect_attempts -lt 3 ]]; do
+  if out="$(busctl call "$SERVICE" "$device_path" org.bluez.Device1 Connect 2>&1)"; then
+    :
+  else
+    last_err="$out"
+    if [[ "$out" == *"In Progress"* ]]; then
+      :
+    fi
+  fi
+
+  # Wait briefly for async connect.
+  for _ in {1..10}; do
+    [[ "$(get_prop "$device_path" Connected || echo false)" == "true" ]] && break
+    sleep 1
+  done
+
+  if [[ "$(get_prop "$device_path" Connected || echo false)" == "true" ]]; then
+    break
+  fi
+
+  # Refresh discovery to help with random addresses / wakeups.
+  start_discovery 2
+  sleep 2
+  stop_discovery
+
+  # Re-resolve device (in case address changed).
+  new_path="$(choose_device 2>/dev/null || true)"
+  if [[ -n "$new_path" ]]; then
+    device_path="$new_path"
+
+    if [[ "$action" == "pair" ]]; then
+      paired_now="$(get_prop "$device_path" Paired || echo false)"
+      if [[ "$paired_now" != "true" ]]; then
+        busctl set-property "$SERVICE" "$adapter" org.bluez.Adapter1 Pairable b true >/dev/null 2>&1 || true
+
+        if [[ ! -x "$AGENT_BIN" ]]; then
+          echo "bt-roba: $AGENT_BIN not found (needed for pairing)" >&2
+          exit 1
+        fi
+
+        agent_log="$(mktemp -t bluez-agent-auto.XXXXXX)"
+        "$AGENT_BIN" --timeout 120 >"$agent_log" 2>&1 &
+        agent_pid=$!
+        sleep 0.2
+
+        if ! out="$(busctl call "$SERVICE" "$device_path" org.bluez.Device1 Pair 2>&1)"; then
+          echo "$out" >&2
+          if [[ -s "$agent_log" ]]; then
+            echo "bt-roba: agent log:" >&2
+            sed -n '1,50p' "$agent_log" >&2 || true
+          fi
+          exit 1
+        fi
+
+        kill "$agent_pid" >/dev/null 2>&1 || true
+        wait "$agent_pid" >/dev/null 2>&1 || true
+        agent_pid=""
+        rm -f "$agent_log" 2>/dev/null || true
+        agent_log=""
+      fi
+    fi
+
+    busctl set-property "$SERVICE" "$device_path" org.bluez.Device1 Trusted b true >/dev/null 2>&1 || true
+  fi
+
+  connect_attempts=$((connect_attempts + 1))
+done
+
+if [[ "$(get_prop "$device_path" Connected || echo false)" != "true" ]]; then
+  if [[ -n "$last_err" ]]; then
+    echo "$last_err" >&2
+  fi
+  echo "bt-roba: connect failed" >&2
+  exit 1
+fi

@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+TARGET_ALIAS_LC="roba"
+SERVICE="org.bluez"
+TEXT="RB"
+
+json_out() {
+  local text="$1" tooltip="$2" klass="$3"
+
+  if command -v jq >/dev/null 2>&1; then
+    jq -nc --arg text "$text" --arg tooltip "$tooltip" --arg class "$klass" '{text:$text, tooltip:$tooltip, class:$class}'
+  else
+    # Best-effort JSON without jq.
+    tooltip=${tooltip//\\/\\\\}
+    tooltip=${tooltip//\"/\\\"}
+    tooltip=${tooltip//$'\n'/\\n}
+    printf '{"text":"%s","tooltip":"%s","class":"%s"}\n' "$text" "$tooltip" "$klass"
+  fi
+}
+
+if ! command -v busctl >/dev/null 2>&1; then
+  json_out "$TEXT" "roBa: busctl not found" "unknown"
+  exit 0
+fi
+
+if ! busctl tree --list "$SERVICE" >/dev/null 2>&1; then
+  json_out "$TEXT" "roBa: BlueZ not available" "unknown"
+  exit 0
+fi
+
+find_device_path() {
+  local p out value alias_lc
+
+  while IFS= read -r p; do
+    case "$p" in
+      /org/bluez/hci*/dev_*/*) continue ;;
+      /org/bluez/hci*/dev_*) ;;
+      *) continue ;;
+    esac
+
+    out="$(busctl get-property "$SERVICE" "$p" org.bluez.Device1 Alias 2>/dev/null || true)"
+    if [[ -n "$out" ]]; then
+      value="${out#* }"
+      value="${value#\"}"
+      value="${value%\"}"
+      alias_lc="${value,,}"
+      if [[ "$alias_lc" == *"$TARGET_ALIAS_LC"* ]]; then
+        printf '%s\n' "$p"
+        return 0
+      fi
+    fi
+
+    out="$(busctl get-property "$SERVICE" "$p" org.bluez.Device1 Name 2>/dev/null || true)"
+    if [[ -n "$out" ]]; then
+      value="${out#* }"
+      value="${value#\"}"
+      value="${value%\"}"
+      alias_lc="${value,,}"
+      if [[ "$alias_lc" == *"$TARGET_ALIAS_LC"* ]]; then
+        printf '%s\n' "$p"
+        return 0
+      fi
+    fi
+  done < <(busctl tree --list "$SERVICE")
+
+  return 1
+}
+
+prop_value() {
+  local path="$1" prop="$2" out type value
+  out="$(busctl get-property "$SERVICE" "$path" org.bluez.Device1 "$prop" 2>/dev/null || true)"
+  [[ -n "$out" ]] || return 1
+  type="${out%% *}"
+  value="${out#* }"
+
+  case "$type" in
+    s|o)
+      value="${value#\"}"
+      value="${value%\"}"
+      ;;
+  esac
+
+  printf '%s' "$value"
+}
+
+device_path="$(find_device_path || true)"
+if [[ -z "$device_path" ]]; then
+  tooltip=$(cat <<EOF
+roBa: not found
+
+Click: connect/pair roBa
+Right click: open Bluetooth
+EOF
+)
+  json_out "$TEXT" "$tooltip" "unknown"
+  exit 0
+fi
+
+name="$(prop_value "$device_path" Name || true)"
+addr="$(prop_value "$device_path" Address || true)"
+addr_type="$(prop_value "$device_path" AddressType || true)"
+connected="$(prop_value "$device_path" Connected || echo false)"
+paired="$(prop_value "$device_path" Paired || echo false)"
+trusted="$(prop_value "$device_path" Trusted || echo false)"
+
+klass="unknown"
+status="Unknown"
+if [[ "$connected" == "true" ]]; then
+  klass="connected"
+  status="Connected"
+elif [[ "$paired" == "true" ]]; then
+  klass="disconnected"
+  status="Disconnected"
+else
+  klass="unpaired"
+  status="Unpaired"
+fi
+
+tooltip=$(cat <<EOF
+roBa: $status
+Name: ${name:-roBa}
+Address: ${addr:-unknown} (${addr_type:-unknown})
+Paired: ${paired}
+Trusted: ${trusted}
+
+Click: connect/pair roBa
+Right click: open Bluetooth
+EOF
+)
+
+json_out "$TEXT" "$tooltip" "$klass"
