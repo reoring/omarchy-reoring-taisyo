@@ -6,7 +6,7 @@ INTERNAL_RE='^(eDP|LVDS|DSI)-'
 
 WAYBAR_MAIN_SIGNAL="${WAYBAR_MAIN_SIGNAL:-10}"
 
-PARK_MIN=${PARK_MIN:-95}
+PARK_MIN=${PARK_MIN:-90}
 PARK_MAX=${PARK_MAX:-99}
 PARK_DEFAULT=${PARK_DEFAULT:-99}
 
@@ -71,7 +71,7 @@ printf '%s' "$new_role" >"$STATE_FILE"
 
 current_ws=$(hyprctl activeworkspace -j | jq -r '.id')
 
-workspaces=$(hyprctl workspaces -j | jq -r '.[].id' | sort -n | uniq)
+workspaces=$(hyprctl workspaces -j | jq -r '.[].id | select(. >= 1)' | sort -n | uniq)
 
 while IFS= read -r ws; do
   [[ -z "$ws" ]] && continue

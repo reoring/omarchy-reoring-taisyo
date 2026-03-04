@@ -16,7 +16,7 @@ fallback_ws="${4:-}"
 STATE_FILE="${XDG_CACHE_HOME:-$HOME/.cache}/hypr-main-role"
 INTERNAL_RE='^(eDP|LVDS|DSI)-'
 
-PARK_MIN=${PARK_MIN:-95}
+PARK_MIN=${PARK_MIN:-90}
 PARK_MAX=${PARK_MAX:-99}
 
 monitors_json=$(hyprctl monitors -j)

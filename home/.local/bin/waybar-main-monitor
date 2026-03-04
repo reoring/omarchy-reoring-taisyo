@@ -36,10 +36,12 @@ if [[ "$role" == "external" ]]; then
   main_monitor="$external"
   icon=""
   klass="external"
+  label="EXT"
 else
   main_monitor="$internal"
   icon=""
   klass="internal"
+  label="INT"
 fi
 
 tooltip=$(cat <<EOF
@@ -56,4 +58,6 @@ AltGr+1..0: parking (when external connected)
 EOF
 )
 
-jq -nc --arg text "$icon" --arg tooltip "$tooltip" --arg class "$klass" '{text: $text, tooltip: $tooltip, class: $class}'
+text="${icon} ${label}"
+
+jq -nc --arg text "$text" --arg tooltip "$tooltip" --arg class "$klass" '{text: $text, tooltip: $tooltip, class: $class}'
