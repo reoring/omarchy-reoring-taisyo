@@ -65,8 +65,19 @@ systemctl --user restart app-org.fcitx.Fcitx5@autostart.service
 
 ## Arch note: libcskk shared library path
 
-On Arch, `cskk-git` installs `libcskk.so` under `/usr/lib/cskk/`.
-This repo ships a systemd user override to make it visible to `fcitx5-cskk`:
+On Arch, `cskk-git` installs `libcskk.so` under `/usr/lib/cskk/`, which is not
+on the default dynamic linker search path. Without a fix, `fcitx5-cskk.so`
+fails to dlopen `libcskk.so.3` and CSKK silently disappears from fcitx5's addon
+list.
 
-- `home/.config/systemd/user/app-org.fcitx.Fcitx5@autostart.service.d/override.conf`
-  - `Environment=LD_LIBRARY_PATH=/usr/lib/cskk`
+`apply.sh` handles this by registering `/usr/lib/cskk` system-wide via
+`/etc/ld.so.conf.d/cskk.conf` (written with sudo) and running `ldconfig`. The
+fix is independent of how fcitx5 is launched (systemd user service, Hyprland
+`exec-once`, manual, etc.).
+
+To apply manually:
+
+```bash
+echo '/usr/lib/cskk' | sudo tee /etc/ld.so.conf.d/cskk.conf
+sudo ldconfig
+```

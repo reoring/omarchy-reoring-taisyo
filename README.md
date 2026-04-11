@@ -43,7 +43,8 @@ Highlights:
   - `~/.local/bin/waybar-main-monitor`, `~/.local/bin/waybar-ddc-brightness`, `~/.local/bin/waybar-fcitx-en`, `~/.local/bin/waybar-lid-suspend`, `~/.local/bin/waybar-keyboard-clean`, `~/.local/bin/waybar-cursor-invisible`
 - systemd (user)
   - `~/.config/systemd/user/lid-nosuspend.service` (toggle-style inhibitor for lid-close suspend)
-  - `~/.config/systemd/user/app-org.fcitx.Fcitx5@autostart.service.d/override.conf` (fix: make `fcitx5-cskk` find `libcskk` when using `cskk-git`)
+- System
+  - `/etc/ld.so.conf.d/cskk.conf` (fix: register `/usr/lib/cskk` so `fcitx5-cskk` finds `libcskk.so.3` when using `cskk-git`; written via sudo during apply)
 - Scripts
   - `~/.local/bin/fcitx-en-toggle` (toggle fcitx5 group: cskk-only <-> cskk+keyboard-us)
   - `~/.local/bin/hypr-ws` (main/park workspace routing)

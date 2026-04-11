@@ -715,6 +715,53 @@ setup_cskk_passthrough_ascii() {
   generate_libcskk_passthrough_ascii_rule "$sys_default_rule" "$user_rules/passthrough_ascii/rule.toml"
 }
 
+# cskk-git (AUR) installs libcskk under /usr/lib/cskk/, which is not on the
+# default dynamic linker search path. Without this, fcitx5-cskk.so fails to
+# dlopen libcskk.so.3 and CSKK silently disappears from fcitx5's addon list.
+# Register the directory system-wide so the fix is independent of how fcitx5
+# is launched (systemd user service, Hyprland exec-once, manual, etc.).
+ensure_libcskk_ldconfig() {
+  local conf="/etc/ld.so.conf.d/cskk.conf"
+  local line="/usr/lib/cskk"
+
+  if [[ ! -e /usr/lib/cskk/libcskk.so.3 ]]; then
+    log "skip: libcskk not under /usr/lib/cskk; ld.so.conf.d fix not needed"
+    return 0
+  fi
+
+  if [[ -f "$conf" ]] && grep -Fxq "$line" "$conf"; then
+    log "ok: $conf"
+    return 0
+  fi
+
+  if [[ $EUID -ne 0 ]] && ! command -v sudo >/dev/null 2>&1; then
+    log "note: sudo not available; cannot write $conf (CSKK may fail to load)"
+    return 0
+  fi
+
+  log "Writing $conf (may prompt for sudo) so fcitx5-cskk can find libcskk.so.3"
+  if (( DRY_RUN )); then
+    log "[dry-run] echo '$line' | sudo tee $conf"
+    log "[dry-run] sudo ldconfig"
+    return 0
+  fi
+
+  if [[ $EUID -eq 0 ]]; then
+    if ! printf '%s\n' "$line" > "$conf"; then
+      log "ERROR: failed to write $conf"
+      return 1
+    fi
+    ldconfig || log "note: ldconfig failed"
+  else
+    if ! printf '%s\n' "$line" | sudo tee "$conf" >/dev/null; then
+      log "ERROR: failed to write $conf via sudo"
+      return 1
+    fi
+    sudo ldconfig || log "note: sudo ldconfig failed"
+  fi
+  log "installed: $conf"
+}
+
 if (( CHECK_ONLY )); then
   preflight
   exit $?
@@ -834,13 +881,11 @@ fi
 install_file "$SRC_HOME/.config/systemd/user/lid-nosuspend.service" "$HOME/.config/systemd/user/lid-nosuspend.service" 0644
 
 # Fcitx5: cskk addon depends on libcskk (cskk-git installs it under /usr/lib/cskk).
-install_file \
-  "$SRC_HOME/.config/systemd/user/app-org.fcitx.Fcitx5@autostart.service.d/override.conf" \
-  "$HOME/.config/systemd/user/app-org.fcitx.Fcitx5@autostart.service.d/override.conf" \
-  0644
-if command -v systemctl >/dev/null 2>&1; then
-  run systemctl --user daemon-reload >/dev/null 2>&1 || true
+# Make libcskk.so.3 discoverable via ld.so.conf.d so fcitx5-cskk loads regardless
+# of how fcitx5 is launched.
+ensure_libcskk_ldconfig
 
+if command -v systemctl >/dev/null 2>&1; then
   if (( FCITX_WAS_ACTIVE )); then
     # Start fcitx5 again now that configs are installed.
     run systemctl --user start "$FCITX_SERVICE" >/dev/null 2>&1 || true

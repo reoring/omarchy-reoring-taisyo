@@ -94,17 +94,22 @@ path = "passthrough_ascii"
 
 ## `libcskk.so` が見つからない場合（cskk-git）
 
-Arch の `cskk-git` は `libcskk.so` を `/usr/lib/cskk/` に置くため、そのままだと `fcitx5-cskk` が `libcskk.so.*` をロードできないことがある。
+Arch の `cskk-git` は `libcskk.so` を `/usr/lib/cskk/` に置く。これは動的リンカーのデフォルト検索パスに含まれないため、そのままだと `fcitx5-cskk.so` が `libcskk.so.3` を dlopen できず、CSKK アドオンが fcitx5 のロード一覧から静かに消える。
 
-このリポジトリは systemd user override で `LD_LIBRARY_PATH` を追加する:
+`apply.sh` は `/etc/ld.so.conf.d/cskk.conf` に `/usr/lib/cskk` を登録して `ldconfig` を走らせることで、システム全体で解決する。fcitx5 の起動方法（systemd user service / Hyprland `exec-once` / 手動）に依存しない堅牢な方法。
 
-- `~/.config/systemd/user/app-org.fcitx.Fcitx5@autostart.service.d/override.conf`
-  - `Environment=LD_LIBRARY_PATH=/usr/lib/cskk`
+手動で適用する場合:
 
-確認例:
+```sh
+echo '/usr/lib/cskk' | sudo tee /etc/ld.so.conf.d/cskk.conf
+sudo ldconfig
+```
+
+確認:
 
 ```sh
 ldd /usr/lib/fcitx5/fcitx5-cskk.so | rg -i 'libcskk|not found'
+# libcskk.so.3 => /usr/lib/cskk/libcskk.so.3 と出れば OK
 ```
 
 ## 反映/再起動
